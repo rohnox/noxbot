@@ -17,6 +17,7 @@ class Settings(BaseSettings):
     IDPAY_API_KEY: str | None = None
     IDPAY_SANDBOX: bool = True
 
+
     @field_validator("ADMINS", mode="before")
     @classmethod
     def parse_admins(cls, v):
