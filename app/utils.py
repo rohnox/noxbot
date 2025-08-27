@@ -17,7 +17,10 @@ async def get_or_create_settings(db: AsyncSession) -> Setting:
         s = Setting(
             support_username=settings.SUPPORT_USERNAME,
             channel_username=settings.CHANNEL_USERNAME,
-            card_number=settings.CARD_NUMBER
+            card_number=settings.CARD_NUMBER,
+            zarinpal_merchant_id=settings.ZARINPAL_MERCHANT_ID,
+            zarinpal_sandbox=settings.ZARINPAL_SANDBOX,
+            idpay_api_key=settings.IDPAY_API_KEY
         )
         db.add(s)
         await db.commit()
