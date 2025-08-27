@@ -152,19 +152,11 @@ async def fill_fields(message: Message, state: FSMContext, db: AsyncSession):
     # show payment methods based on settings
 # --- جایگزین ask_payment ---
 async def ask_payment(message: Message, state: FSMContext, db: AsyncSession):
-    # اگر از DB می‌خوانی:
-    from ..utils import get_or_create_settings
-    s = await get_or_create_settings(db)
-    has_zp = bool(s.zarinpal_merchant_id)
-    has_idpay = bool(s.idpay_api_key)
-
     await message.answer(
         ASK_PAYMENT_METHOD,
-        reply_markup=payment_methods_kb(has_zp, has_idpay)
+        reply_markup=payment_methods_kb(False, False)  # فقط کارت به کارت
     )
     await state.set_state(OrderFlow.choosing_payment)
-
-
 
 @router.callback_query(F.data.startswith("pay:"), OrderFlow.choosing_payment)
 async def choose_payment(cb: CallbackQuery, state: FSMContext, db: AsyncSession):
@@ -260,7 +252,6 @@ async def handle_zarinpal(cb: CallbackQuery, order: Order, db: AsyncSession):
         await cb.answer("زرین‌پال هنوز تنظیم نشده.", show_alert=True)
         return
 
-    #from ..services.payments.zarinpal import ZarinpalGateway
     gw = ZarinpalGateway(merchant_id=s.zarinpal_merchant_id, sandbox=bool(s.zarinpal_sandbox))
 
     callback_url = f"{settings.BASE_URL}/payments/zarinpal/callback?oid={order.id}"
@@ -282,7 +273,6 @@ async def handle_idpay(cb: CallbackQuery, order: Order, db: AsyncSession):
         await cb.answer("آیدی‌پی هنوز تنظیم نشده.", show_alert=True)
         return
 
-    #from ..services.payments.idpay import IDPayGateway
     gw = IDPayGateway(api_key=s.idpay_api_key, sandbox=bool(s.idpay_sandbox))
 
     callback_url = f"{settings.BASE_URL}/payments/idpay/callback?oid={order.id}"
@@ -294,4 +284,10 @@ async def handle_idpay(cb: CallbackQuery, order: Order, db: AsyncSession):
     await db.commit()
 
     await cb.message.edit_text(f"برای پرداخت روی لینک زیر بزنید:\n{link.url}")
+    
+async def handle_zarinpal(cb, order, db):
+    await cb.answer("پرداخت زرین‌پال فعلاً غیرفعال است.", show_alert=True)
+
+async def handle_idpay(cb, order, db):
+    await cb.answer("پرداخت آیدی‌پی فعلاً غیرفعال است.", show_alert=True)
 
