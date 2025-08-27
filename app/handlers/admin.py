@@ -22,7 +22,39 @@ class AdminStates(StatesGroup):
     set_support = State()
     set_channel = State()
     set_card = State()
+    set_zp_mid = State()
+    set_zp_sb  = State()
+    set_idpay_key = State()
+    set_idpay_sb  = State()
 
+@router.callback_query(F.data == "set:zp")
+async def set_zp(cb: CallbackQuery, state: FSMContext):
+    await cb.message.answer(ADMIN_PROMPT_ZP_MID); await state.set_state(AdminStates.set_zp_mid)
+
+@router.message(AdminStates.set_zp_mid)
+async def save_zp_mid(message: Message, db: AsyncSession, state: FSMContext):
+    s = await get_or_create_settings(db); s.zarinpal_merchant_id = message.text.strip(); await db.commit()
+    await message.answer(ADMIN_PROMPT_ZP_SB); await state.set_state(AdminStates.set_zp_sb)
+
+@router.message(AdminStates.set_zp_sb)
+async def save_zp_sb(message: Message, db: AsyncSession, state: FSMContext):
+    s = await get_or_create_settings(db); s.zarinpal_sandbox = (message.text.strip() in ("1","true","True")); await db.commit()
+    await message.answer(ADMIN_SAVED); await state.clear()
+
+@router.callback_query(F.data == "set:idpay")
+async def set_idpay(cb: CallbackQuery, state: FSMContext):
+    await cb.message.answer(ADMIN_PROMPT_IDPAY_KEY); await state.set_state(AdminStates.set_idpay_key)
+
+@router.message(AdminStates.set_idpay_key)
+async def save_idpay_key(message: Message, db: AsyncSession, state: FSMContext):
+    s = await get_or_create_settings(db); s.idpay_api_key = message.text.strip(); await db.commit()
+    await message.answer(ADMIN_PROMPT_IDPAY_SB); await state.set_state(AdminStates.set_idpay_sb)
+
+@router.message(AdminStates.set_idpay_sb)
+async def save_idpay_sb(message: Message, db: AsyncSession, state: FSMContext):
+    s = await get_or_create_settings(db); s.idpay_sandbox = (message.text.strip() in ("1","true","True")); await db.commit()
+    await message.answer(ADMIN_SAVED); await state.clear()
+    
 @router.message(F.text == "/admin")
 async def admin_start(message: Message):
     await message.answer(ADMIN_PANEL, reply_markup=admin_panel_kb())
