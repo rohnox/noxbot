@@ -1,3 +1,4 @@
+# app/config.py
 from pydantic_settings import BaseSettings
 from pydantic import Field, field_validator
 from typing import List
@@ -19,18 +20,13 @@ class Settings(BaseSettings):
     @field_validator("ADMINS", mode="before")
     @classmethod
     def parse_admins(cls, v):
-        # می‌پذیرد: لیست JSON، "123,456"، یا عدد تنها
-        if isinstance(v, list):
-            return [int(x) for x in v]
-        if isinstance(v, int):
-            return [v]
+        if isinstance(v, list): return [int(x) for x in v]
+        if isinstance(v, int):  return [v]
         if isinstance(v, str):
             s = v.strip()
-            if not s:
-                return []
+            if not s: return []
             if s.startswith("["):
-                import json
-                return [int(x) for x in json.loads(s)]
+                import json; return [int(x) for x in json.loads(s)]
             return [int(x) for x in s.split(",")]
         return v
 
