@@ -25,6 +25,12 @@ class Setting(Base):
     support_username: Mapped[str | None] = mapped_column(String(64), default=None)
     channel_username: Mapped[str | None] = mapped_column(String(64), default=None)
     card_number: Mapped[str | None] = mapped_column(String(32), default=None)
+    # ↓ جدید:
+    zarinpal_merchant_id: Mapped[str | None] = mapped_column(String(64), default=None)
+    zarinpal_sandbox: Mapped[bool] = mapped_column(Boolean, default=True)
+    idpay_api_key: Mapped[str | None] = mapped_column(String(128), default=None)
+    idpay_sandbox: Mapped[bool] = mapped_column(Boolean, default=True)
+
 
 class Category(Base):
     __tablename__ = "categories"
