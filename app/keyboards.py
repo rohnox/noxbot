@@ -57,8 +57,11 @@ def admin_settings_kb():
     builder.button(text=ADMIN_SET_SUPPORT, callback_data="set:support")
     builder.button(text=ADMIN_SET_CHANNEL, callback_data="set:channel")
     builder.button(text=ADMIN_SET_CARD, callback_data="set:card")
+    builder.button(text=ADMIN_SET_ZARINPAL, callback_data="set:zp")
+    builder.button(text=ADMIN_SET_IDPAY, callback_data="set:idpay")
     builder.adjust(1)
     return builder.as_markup()
+
 
 def orders_actions_kb(oid: int):
     builder = InlineKeyboardBuilder()
