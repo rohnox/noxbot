@@ -260,7 +260,7 @@ async def handle_zarinpal(cb: CallbackQuery, order: Order, db: AsyncSession):
         await cb.answer("زرین‌پال هنوز تنظیم نشده.", show_alert=True)
         return
 
-    from ..services.payments.zarinpal import ZarinpalGateway
+    #from ..services.payments.zarinpal import ZarinpalGateway
     gw = ZarinpalGateway(merchant_id=s.zarinpal_merchant_id, sandbox=bool(s.zarinpal_sandbox))
 
     callback_url = f"{settings.BASE_URL}/payments/zarinpal/callback?oid={order.id}"
@@ -282,7 +282,7 @@ async def handle_idpay(cb: CallbackQuery, order: Order, db: AsyncSession):
         await cb.answer("آیدی‌پی هنوز تنظیم نشده.", show_alert=True)
         return
 
-    from ..services.payments.idpay import IDPayGateway
+    #from ..services.payments.idpay import IDPayGateway
     gw = IDPayGateway(api_key=s.idpay_api_key, sandbox=bool(s.idpay_sandbox))
 
     callback_url = f"{settings.BASE_URL}/payments/idpay/callback?oid={order.id}"
