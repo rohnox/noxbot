@@ -72,6 +72,14 @@ ADMIN_SET_REQUIRED_FIELDS_PROMPT = (
     "یا /skip برای خالی."
 )
 
+ADMIN_SET_ZARINPAL = "تنظیم زرین‌پال"
+ADMIN_SET_IDPAY = "تنظیم آیدی‌پی"
+ADMIN_PROMPT_ZP_MID = "MerchantID زرین‌پال را ارسال کنید:"
+ADMIN_PROMPT_ZP_SB  = "Sandbox زرین‌پال؟ 1 یا 0 ارسال کنید:"
+ADMIN_PROMPT_IDPAY_KEY = "API Key آیدی‌پی را ارسال کنید:"
+ADMIN_PROMPT_IDPAY_SB  = "Sandbox آیدی‌پی؟ 1 یا 0 ارسال کنید:"
+
+
 ORDERS_PENDING = "سفارش‌های در انتظار بررسی:"
 ORDER_ROW = "سفارش #{oid} | کاربر {uid} | مبلغ {amount} | روش {pm} | وضعیت {st}"
 ORDER_APPROVE = "تایید پرداخت ✅"
