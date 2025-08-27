@@ -150,16 +150,20 @@ async def fill_fields(message: Message, state: FSMContext, db: AsyncSession):
     else:
         await ask_payment(message, state, db)
     # show payment methods based on settings
+# --- جایگزین ask_payment ---
 async def ask_payment(message: Message, state: FSMContext, db: AsyncSession):
+    # اگر از DB می‌خوانی:
     from ..utils import get_or_create_settings
     s = await get_or_create_settings(db)
     has_zp = bool(s.zarinpal_merchant_id)
     has_idpay = bool(s.idpay_api_key)
+
     await message.answer(
         ASK_PAYMENT_METHOD,
         reply_markup=payment_methods_kb(has_zp, has_idpay)
     )
     await state.set_state(OrderFlow.choosing_payment)
+
 
 
 @router.callback_query(F.data.startswith("pay:"), OrderFlow.choosing_payment)
@@ -248,8 +252,29 @@ async def manual_proof_skip(message: Message, state: FSMContext):
     await message.answer("باشه. سفارش شما در صف بررسی دستی است.")
     await state.clear()
 
-await cb.message.edit_text(f"برای پرداخت روی لینک زیر بزنید:\n{link.url}")
+# --- جایگزین handle_zarinpal ---
+async def handle_zarinpal(cb: CallbackQuery, order: Order, db: AsyncSession):
+    from ..utils import get_or_create_settings
+    s = await get_or_create_settings(db)
+    if not s.zarinpal_merchant_id:
+        await cb.answer("زرین‌پال هنوز تنظیم نشده.", show_alert=True)
+        return
 
+    from ..services.payments.zarinpal import ZarinpalGateway
+    gw = ZarinpalGateway(merchant_id=s.zarinpal_merchant_id, sandbox=bool(s.zarinpal_sandbox))
+
+    callback_url = f"{settings.BASE_URL}/payments/zarinpal/callback?oid={order.id}"
+    link = await gw.create_payment(amount=int(order.amount), description=f"Order#{order.id}", callback_url=callback_url)
+
+    order.payment_method = PaymentMethod.zarinpal
+    order.gateway = "zarinpal"
+    order.gateway_authority = link.authority
+    await db.commit()
+
+    await cb.message.edit_text(f"برای پرداخت روی لینک زیر بزنید:\n{link.url}")
+
+
+# --- جایگزین handle_idpay ---
 async def handle_idpay(cb: CallbackQuery, order: Order, db: AsyncSession):
     from ..utils import get_or_create_settings
     s = await get_or_create_settings(db)
@@ -269,3 +294,4 @@ async def handle_idpay(cb: CallbackQuery, order: Order, db: AsyncSession):
     await db.commit()
 
     await cb.message.edit_text(f"برای پرداخت روی لینک زیر بزنید:\n{link.url}")
+
