@@ -9,8 +9,6 @@ from ..keyboards import main_menu, categories_kb, products_kb, plans_kb, payment
 from ..models import User, Category, Product, ProductPlan, Order, OrderStatus, PaymentMethod, OrderMeta
 from ..utils import get_or_create_settings
 from ..config import settings
-from ..services.payments.zarinpal import ZarinpalGateway
-from ..services.payments.idpay import IDPayGateway
 
 router = Router(name="user")
 
