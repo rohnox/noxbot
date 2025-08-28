@@ -20,11 +20,21 @@ from app.keyboards import (
 
 router = Router()
 
+def _gen_tracking():
+    import random, string
+    return ''.join(random.choices(string.ascii_uppercase + string.digits, k=8))
+
+
 class ProdStates(StatesGroup):
     adding_title = State()(StatesGroup):
     adding_title = State()
 
 class PlanStates(StatesGroup):
+    adding_title = State()  # keep existing states
+
+class FindStates(StatesGroup):
+    waiting_trk = State()
+
     adding_title = State()
     adding_price = State()
     adding_desc = State()
@@ -240,18 +250,23 @@ async def admin_order_details(cb: CallbackQuery):
     await cb.message.edit_text(txt, reply_markup=admin_order_actions_kb(oid))
 
 @router.callback_query(F.data.startswith("admin:order_processing:"))
-async def admin_order_approve(cb: CallbackQuery):
+async def admin_order_processing(cb: CallbackQuery):
     if not await guard_admin(cb):
         return
     oid = int(cb.data.split(":")[2])
-    await execute("UPDATE orders SET status='approved' WHERE id=?", oid)
-    row = await fetchone("SELECT u.tg_id FROM orders o JOIN users u ON u.id=o.user_id WHERE o.id=?", oid)
-    if row:
+    await execute("UPDATE orders SET status='processing' WHERE id=?", oid)
+    row = await fetchone("SELECT tracking_code, u.tg_id FROM orders o JOIN users u ON u.id=o.user_id WHERE o.id=?", oid)
+    trk = row["tracking_code"]
+    if not trk:
+        trk = _gen_tracking()
+        await execute("UPDATE orders SET tracking_code=? WHERE id=?", trk, oid)
+    if row and row["tg_id"]:
         try:
-            await cb.bot.send_message(row["tg_id"], "✅ سفارش شما تایید شد.")
+            await cb.bot.send_message(row["tg_id"], "🔧")  # animated emoji
+            await cb.bot.send_message(row["tg_id"], f"🔧 سفارش شما با کد پیگیری {trk} در حال انجام است.")
         except Exception:
             pass
-    await cb.answer("✅ تایید شد")
+    await cb.answer("🔧 به حالت در حال انجام تغییر کرد")
     await admin_orders(cb)
 
 @router.callback_query(F.data.startswith("admin:order_reject:"))
@@ -260,13 +275,17 @@ async def admin_order_reject(cb: CallbackQuery):
         return
     oid = int(cb.data.split(":")[2])
     await execute("UPDATE orders SET status='rejected' WHERE id=?", oid)
-    row = await fetchone("SELECT u.tg_id FROM orders o JOIN users u ON u.id=o.user_id WHERE o.id=?", oid)
-    if row:
+    row = await fetchone("SELECT tracking_code, u.tg_id FROM orders o JOIN users u ON u.id=o.user_id WHERE o.id=?", oid)
+    trk = row["tracking_code"]
+    if not trk:
+        trk = _gen_tracking()
+        await execute("UPDATE orders SET tracking_code=? WHERE id=?", trk, oid)
+    if row and row["tg_id"]:
         try:
-            await cb.bot.send_message(row["tg_id"], "❌ سفارش شما رد شد. لطفاً با پشتیبانی در ارتباط باشید.")
+            await cb.bot.send_message(row["tg_id"], f"❌ سفارش شما با کد پیگیری {trk} رد شد. لطفاً با پشتیبانی در ارتباط باشید.")
         except Exception:
             pass
-    await cb.answer("❌ رد شد")
+    await cb.answer("❌ سفارش رد شد")
     await admin_orders(cb)
 
 @router.callback_query(F.data == "admin:settings")
@@ -403,10 +422,42 @@ async def admin_order_complete(cb: CallbackQuery):
     oid = int(cb.data.split(":")[2])
     await execute("UPDATE orders SET status='completed' WHERE id=?", oid)
     row = await fetchone("SELECT tracking_code, u.tg_id FROM orders o JOIN users u ON u.id=o.user_id WHERE o.id=?", oid)
+    trk = row["tracking_code"]
+    if not trk:
+        trk = _gen_tracking()
+        await execute("UPDATE orders SET tracking_code=? WHERE id=?", trk, oid)
     if row and row["tg_id"]:
         try:
-            await cb.bot.send_message(row["tg_id"], f"🎉 سفارش شما با کد پیگیری {row['tracking_code']} انجام شد.")
+            await cb.bot.send_message(row["tg_id"], "🎉")  # animated emoji
+            await cb.bot.send_message(row["tg_id"], f"🎉 سفارش شما با کد پیگیری {trk} انجام شد.")
         except Exception:
             pass
     await cb.answer("✅ اتمام کار ثبت شد")
     await admin_orders(cb)
+
+
+@router.callback_query(F.data == "admin:find_by_trk")
+async def admin_find_by_trk_start(cb: CallbackQuery, state: FSMContext):
+    if not await guard_admin(cb):
+        return
+    await state.set_state(FindStates.waiting_trk)
+    await cb.message.edit_text("کد پیگیری سفارش را ارسال کنید:", reply_markup=admin_menu_kb())
+
+@router.message(FindStates.waiting_trk, F.text)
+async def admin_find_by_trk_recv(m: Message, state: FSMContext):
+    code = (m.text or "").strip().upper()
+    row = await fetchone("""SELECT o.id, o.status, o.tracking_code, p.title as plan_title, pr.title as product_title, p.price
+                             FROM orders o
+                             JOIN plans p ON p.id=o.plan_id
+                             JOIN products pr ON pr.id=o.product_id
+                             WHERE o.tracking_code=?""", code)
+    await state.clear()
+    if not row:
+        await m.answer("یافت نشد. مطمئنید کد پیگیری درست است؟", reply_markup=admin_menu_kb())
+        return
+    # Show detail with actions
+    from app.keyboards import admin_order_actions_kb
+    txt = (f"سفارش #{row['id']}\nکد پیگیری: {row['tracking_code']}\n"
+           f"محصول: {row['product_title']}\nپلن: {row['plan_title']}\n"
+           f"قیمت: {row['price']:,} تومان\nوضعیت: {row['status']}")
+    await m.answer(txt, reply_markup=admin_order_actions_kb(row['id']))

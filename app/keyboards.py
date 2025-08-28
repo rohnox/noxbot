@@ -64,10 +64,11 @@ def admin_menu_kb():
     kb.button(text="💠 پلن‌ها", callback_data="admin:plans")
     kb.button(text="🧾 سفارش‌ها", callback_data="admin:orders")
     kb.button(text="⚙️ تنظیمات", callback_data="admin:settings")
+    kb.button(text="🔎 جستجو با کد پیگیری", callback_data="admin:find_by_trk")
     kb.button(text="📨 پیام همگانی", callback_data="admin:broadcast_copy")
     kb.button(text="🔁 فوروارد همگانی", callback_data="admin:broadcast_forward")
     kb.button(text="⬅️ منوی اصلی", callback_data="home")
-    kb.adjust(2,2,2,1)
+    kb.adjust(2,2,2,1,1)
     return kb.as_markup()
 
 
