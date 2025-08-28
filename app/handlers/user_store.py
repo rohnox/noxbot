@@ -51,7 +51,7 @@ async def plan_pick(c: CallbackQuery, state: FSMContext):
     txt = texts.STORE_SUMMARY.format(product=plan["product_title"], plan=plan["plan_title"], price=plan["price"]) + (f"\n\n📝 توضیح پلن: {desc}" if desc else '') + "\\n\\n" + texts.CONTINUE_TO_PAY
     await c.message.edit_text(txt, reply_markup=pay_kb(plan_id))
 
-@router.callback_query(F.data.startswith("pay:"))
+@router.callback_query(F.data.regexp(r"^pay:(\d+)$"))
 async def pay_cb(c: CallbackQuery, state: FSMContext):
     plan_id = int(c.data.split(":")[1])
     plan = await fetchone("SELECT p.id as plan_id, p.title as plan_title, p.price, p.description, pr.title as product_title, pr.id as product_id FROM plans p JOIN products pr ON pr.id=p.product_id WHERE p.id=?", plan_id)
