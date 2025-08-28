@@ -11,7 +11,7 @@ def main_menu(is_admin: bool = False):
     kb.button(text="🆘 پشتیبانی", callback_data="support")
     if is_admin:
         kb.button(text="🛠️ پنل مدیریت", callback_data="admin:menu")
-    kb.adjust(2,2,1,1)
+    kb.adjust(2, 2, 1, 1)
     return kb.as_markup()
 
 def back_home_kb():
@@ -24,7 +24,7 @@ def shop_products_kb(prods):
     for p in prods:
         kb.button(text=f"🛒 {p['title']}", callback_data=f"product:{p['id']}")
     kb.button(text="🏠 منوی اصلی", callback_data="home")
-    kb.adjust(1,1)
+    kb.adjust(1, 1)
     return kb.as_markup()
 
 def shop_plans_kb(plans, product_id: int):
@@ -32,21 +32,21 @@ def shop_plans_kb(plans, product_id: int):
     for pl in plans:
         kb.button(text=f"💠 {pl['title']} | {pl['price']:,} تومان", callback_data=f"plan:{pl['id']}")
     kb.button(text="⬅️ محصولات", callback_data="shop")
-    kb.adjust(1,1)
+    kb.adjust(1, 1)
     return kb.as_markup()
 
 def pay_kb(plan_id: int):
     kb = InlineKeyboardBuilder()
     kb.button(text="💳 پرداخت کارت به کارت", callback_data=f"pay:{plan_id}")
     kb.button(text="⬅️ بازگشت", callback_data="shop")
-    kb.adjust(1,1)
+    kb.adjust(1, 1)
     return kb.as_markup()
 
 def proof_kb(order_id: int):
     kb = InlineKeyboardBuilder()
     kb.button(text="🧾 ارسال رسید", callback_data=f"proof:{order_id}")
     kb.button(text="❌ انصراف", callback_data="home")
-    kb.adjust(1,1)
+    kb.adjust(1, 1)
     return kb.as_markup()
 
 # ===== Admin menus =====
@@ -60,7 +60,18 @@ def admin_menu_kb():
     kb.button(text="📨 پیام همگانی", callback_data="admin:broadcast_copy")
     kb.button(text="🔁 فوروارد همگانی", callback_data="admin:broadcast_forward")
     kb.button(text="⬅️ منوی اصلی", callback_data="home")
-    kb.adjust(2,2,2,1,1)
+    kb.adjust(2, 2, 2, 1, 1)
+    return kb.as_markup()
+
+def admin_settings_kb():
+    kb = InlineKeyboardBuilder()
+    kb.button(text="📝 کانال اصلی", callback_data="admin:set:MAIN_CHANNEL")
+    kb.button(text="📝 کانال سفارش‌ها", callback_data="admin:set:ORDER_CHANNEL")
+    kb.button(text="📝 یوزرنیم پشتیبانی", callback_data="admin:set:SUPPORT_USERNAME")
+    kb.button(text="📝 شماره کارت", callback_data="admin:set:CARD")
+    kb.button(text="📝 متن خوش‌آمد", callback_data="admin:set:WELCOME_TEXT")
+    kb.button(text="⬅️ بازگشت", callback_data="admin:menu")
+    kb.adjust(2, 2, 1, 1)
     return kb.as_markup()
 
 def admin_prods_kb(prods):
@@ -71,7 +82,7 @@ def admin_prods_kb(prods):
         kb.button(text=f"💠 پلن‌ها", callback_data=f"admin:plans_for_prod:{p['id']}")
     kb.button(text="➕ افزودن محصول", callback_data="admin:add_prod")
     kb.button(text="⬅️ بازگشت", callback_data="admin:menu")
-    kb.adjust(3,1,1)
+    kb.adjust(3, 1, 1)
     return kb.as_markup()
 
 def admin_plans_list_kb(plans, pid: int):
@@ -81,7 +92,7 @@ def admin_plans_list_kb(plans, pid: int):
         kb.button(text=f"❌ حذف", callback_data=f"admin:del_plan:{pl['id']}")
     kb.button(text="➕ افزودن پلن", callback_data=f"admin:add_plan:{pid}")
     kb.button(text="⬅️ محصولات", callback_data="admin:prods")
-    kb.adjust(2,1,1)
+    kb.adjust(2, 1, 1)
     return kb.as_markup()
 
 def admin_orders_kb(orders):
@@ -98,5 +109,5 @@ def admin_order_actions_kb(order_id: int):
     kb.button(text="✅ اتمام کار", callback_data=f"admin:order_complete:{order_id}")
     kb.button(text="❌ رد", callback_data=f"admin:order_reject:{order_id}")
     kb.button(text="⬅️ لیست سفارش‌ها", callback_data="admin:orders")
-    kb.adjust(2,2)
+    kb.adjust(2, 2)
     return kb.as_markup()
