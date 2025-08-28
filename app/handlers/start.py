@@ -62,20 +62,21 @@ async def shop_product(cb: CallbackQuery):
 @router.callback_query(F.data.startswith("plan:"))
 async def shop_plan(cb: CallbackQuery):
     plid = int(cb.data.split(":")[1])
-    row = await fetchone("SELECT p.title as plan_title, p.price, p.description, pr.title as product_title FROM plans p JOIN products pr ON pr.id=p.product_id WHERE p.id=?", plid)
+    row = await fetchone("...", plid)
     if not row:
-        await cb.answer("پلن یافت نشد.", show_alert=True); return
-txt = f"""🧾 جزئیات پلن:
+        await cb.answer("پلن یافت نشد.", show_alert=True)
+        return
+    txt = f"""🧾 جزئیات پلن:
 محصول: {row['product_title']}
 عنوان: {row['plan_title']}
 قیمت: {row['price']:,} تومان
 —
 {row['description']}"""
-
     try:
         await cb.message.edit_text(txt, reply_markup=pay_kb(plid))
     except TelegramBadRequest:
         await cb.message.answer(txt, reply_markup=pay_kb(plid))
+
 
 # ---- Account / Orders ----
 @router.callback_query(F.data == "account")
