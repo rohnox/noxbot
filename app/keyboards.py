@@ -2,17 +2,29 @@
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 
 # ===== User menus =====
-def main_menu(is_admin: bool = False):
+def main_menu(is_admin: bool = False, channel_url: str | None = None, support_url: str | None = None):
     kb = InlineKeyboardBuilder()
     kb.button(text="🛍️ فروشگاه", callback_data="shop")
     kb.button(text="📦 سفارشات من", callback_data="orders_me")
     kb.button(text="👤 حساب کاربری", callback_data="account")
-    kb.button(text="📣 کانال ما", callback_data="channel")
-    kb.button(text="🆘 پشتیبانی", callback_data="support")
+
+    # اگر URL داریم، دکمه را به‌صورت لینک می‌سازیم
+    if channel_url:
+        kb.button(text="📣 کانال ما", url=channel_url)
+    else:
+        kb.button(text="📣 کانال ما", callback_data="channel")
+
+    if support_url:
+        kb.button(text="🆘 پشتیبانی", url=support_url)
+    else:
+        kb.button(text="🆘 پشتیبانی", callback_data="support")
+
     if is_admin:
         kb.button(text="🛠️ پنل مدیریت", callback_data="admin:menu")
+
     kb.adjust(2, 2, 1, 1)
     return kb.as_markup()
+
 
 def back_home_kb():
     kb = InlineKeyboardBuilder()
