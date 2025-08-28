@@ -10,7 +10,6 @@ def main_menu(is_admin: bool, main_channel_url: str | None = None) -> InlineKeyb
     kb.button(text="👤 حساب", callback_data="account")
     kb.button(text="📦 سفارشات من", callback_data="orders:mine")
     kb.button(text="🆘 ارتباط با پشتیبانی", callback_data="support")
-    kb.button(text="🆘 پشتیبانی", callback_data="support")
     if is_admin:
         kb.button(text="پنل مدیریت 🛠️", callback_data="admin:menu")
     kb.adjust(2, 2, 2)
@@ -72,29 +71,16 @@ def admin_menu_kb():
     kb.adjust(2,2,2,2)
     return kb.as_markup()
 
-def admin_cats_kb(cats):
-    kb = InlineKeyboardBuilder()
-    for c in cats:
-        kb.button(text=f"📦 {c['title']} ❌", callback_data=f"admin:del_cat:{c['id']}")
-    kb.button(text="➕ افزودن دسته", callback_data="admin:add_cat")
-    kb.button(text="⬅️ بازگشت", callback_data="admin:menu")
-    kb.adjust(1)
-    return kb.as_markup()
 
-def admin_prods_cats_kb(cats):
-    kb = InlineKeyboardBuilder()
-    for c in cats:
-        kb.button(text=f"📦 {c['title']}", callback_data=f"admin:prods_cat:{c['id']}")
-    kb.button(text="⬅️ بازگشت", callback_data="admin:menu")
-    kb.adjust(1)
-    return kb.as_markup()
 
-def admin_prods_kb(prods, cat_id:int):
+
+
+def admin_prods_kb(prods):
     kb = InlineKeyboardBuilder()
     for p in prods:
         kb.button(text=f"🧩 {p['title']} ❌", callback_data=f"admin:del_prod:{p['id']}")
     kb.button(text="➕ افزودن محصول", callback_data=f"admin:add_prod:{cat_id}")
-    kb.button(text="⬅️ انتخاب دسته", callback_data="admin:prods")
+    kb.button(text="⬅️ بازگشت", callback_data="admin:menu")
     kb.adjust(1)
     return kb.as_markup()
 

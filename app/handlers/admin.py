@@ -15,10 +15,8 @@ from app.keyboards import (
 
 router = Router()
 
-class CatStates(StatesGroup):
-    adding = State()
-
 class ProdStates(StatesGroup):
+    adding_title = State()(StatesGroup):
     adding_title = State()
 
 class PlanStates(StatesGroup):
@@ -49,26 +47,9 @@ async def admin_menu(cb: CallbackQuery):
         return
     await cb.message.edit_text(texts.ADMIN_MENU_TEXT, reply_markup=admin_menu_kb())
 
-@router.callback_query(F.data == "admin:cats")
-async def admin_cats(cb: CallbackQuery):
-    if not await guard_admin(cb):
-        return
-    cats = await fetchall("SELECT id, title FROM categories ORDER BY id DESC")
-    await cb.message.edit_text("مدیریت دسته‌ها:", reply_markup=admin_cats_kb(cats))
 
-@router.callback_query(F.data == "admin:add_cat")
-async def admin_add_cat(cb: CallbackQuery, state: FSMContext):
-    if not await guard_admin(cb):
-        return
-    await state.set_state(CatStates.adding)
-    await cb.message.edit_text("عنوان دسته جدید را ارسال کنید (یا /cancel):")
 
-@router.message(CatStates.adding, F.text)
-async def admin_add_cat_title(m: Message, state: FSMContext):
-    title = (m.text or "").strip()
-    if not title:
-        await m.answer("عنوان نامعتبر است. دوباره ارسال کنید.")
-        return
+
     await execute("INSERT INTO categories(title) VALUES(?)", title)
     await state.clear()
     await m.answer("✅ دسته اضافه شد.", reply_markup=admin_menu_kb())
@@ -85,11 +66,8 @@ async def admin_del_cat(cb: CallbackQuery):
 async def admin_prods(cb: CallbackQuery):
     if not await guard_admin(cb):
         return
-    cats = await fetchall("SELECT id, title FROM categories ORDER BY id DESC")
-    if not cats:
-        await cb.message.edit_text("ابتدا دسته اضافه کنید.", reply_markup=admin_menu_kb())
-        return
-    await cb.message.edit_text("یک دسته را برای مدیریت محصولات انتخاب کنید:", reply_markup=admin_prods_cats_kb(cats))
+    prods = await fetchall("SELECT id, title FROM products ORDER BY id DESC")
+    await cb.message.edit_text("مدیریت محصولات:", reply_markup=admin_prods_kb(prods))
 
 @router.callback_query(F.data.startswith("admin:prods_cat:"))
 async def admin_prods_for_cat(cb: CallbackQuery):

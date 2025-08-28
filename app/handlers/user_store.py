@@ -28,7 +28,7 @@ async def store_cb(c: CallbackQuery):
         await c.message.edit_text(texts.EMPTY_LIST, reply_markup=back_home_kb())
         return
     # reuse products_kb; cat_id argument removed, adapt signature
-    await c.message.edit_text("یک محصول را انتخاب کنید:", reply_markup=products_kb(prods, 0))
+    await c.message.edit_text("یک محصول را انتخاب کنید:", reply_markup=products_kb(prods))
 
 @router.callback_query(F.data.startswith("prod:"))
 async def product_pick(c: CallbackQuery):

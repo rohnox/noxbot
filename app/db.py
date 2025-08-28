@@ -22,10 +22,10 @@ async def init_db() -> None:
     )""")
     await _DB.execute("""CREATE TABLE IF NOT EXISTS products(
         id INTEGER PRIMARY KEY AUTOINCREMENT,
-        category_id INTEGER NOT NULL,
+        
         title TEXT NOT NULL,
         description TEXT DEFAULT '',
-        FOREIGN KEY(category_id) REFERENCES categories(id) ON DELETE CASCADE
+        
     )""")
     await _DB.execute("""CREATE TABLE IF NOT EXISTS plans(
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -86,7 +86,7 @@ async def execute(query: str, *params) -> int:
     return cur.lastrowid
 
 async def set_setting(key: str, value: str) -> None:
-    await execute("""INSERT INTO settings(key, value) VALUES(?,?)
+    await execute("""INSERT INTO settings(key, value) VALUES(?)
                      ON CONFLICT(key) DO UPDATE SET value=excluded.value""", key, value)
 
 async def get_setting(key: str, default=None):
