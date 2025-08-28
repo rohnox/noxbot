@@ -3,21 +3,29 @@ from aiogram import Router, F
 from aiogram.types import Message, CallbackQuery
 from aiogram.exceptions import TelegramBadRequest
 
-from app.db import fetchall, fetchone, set_setting, get_setting, upsert_user
-from app.keyboards import main_menu, back_home_kb, shop_products_kb, shop_plans_kb, pay_kb
+from app.db import fetchall, fetchone, get_setting, upsert_user
+from app.keyboards import (
+    main_menu,
+    back_home_kb,
+    shop_products_kb,
+    shop_plans_kb,
+    pay_kb,
+)
 
 router = Router()
 
+# /start
 @router.message(F.text == "/start")
 async def start_cmd(m: Message):
-    # upsert user
+    # ثبت/به‌روزرسانی کاربر
     await upsert_user(m.from_user.id, m.from_user.first_name or "", m.from_user.username or "", 0)
-    # show main menu
+    # نمایش منوی اصلی با تشخیص ادمین
     from app.config import settings
     admins = set(map(int, (settings.admins or "").split(","))) if isinstance(settings.admins, str) else set(settings.admins or [])
     is_admin = m.from_user.id in admins
     await m.answer("خوش آمدید 👋", reply_markup=main_menu(is_admin))
 
+# بازگشت به خانه
 @router.callback_query(F.data == "home")
 async def go_home(cb: CallbackQuery):
     from app.config import settings
@@ -28,7 +36,7 @@ async def go_home(cb: CallbackQuery):
     except TelegramBadRequest:
         await cb.message.answer("منوی اصلی:", reply_markup=main_menu(is_admin))
 
-# ---- Shop ----
+# ===== فروشگاه =====
 @router.callback_query(F.data == "shop")
 async def shop_menu(cb: CallbackQuery):
     prods = await fetchall("SELECT id, title FROM products ORDER BY id DESC")
@@ -62,7 +70,11 @@ async def shop_product(cb: CallbackQuery):
 @router.callback_query(F.data.startswith("plan:"))
 async def shop_plan(cb: CallbackQuery):
     plid = int(cb.data.split(":")[1])
-    row = await fetchone("...", plid)
+    row = await fetchone(
+        "SELECT p.title as plan_title, p.price, p.description, pr.title as product_title "
+        "FROM plans p JOIN products pr ON pr.id=p.product_id WHERE p.id=?",
+        plid,
+    )
     if not row:
         await cb.answer("پلن یافت نشد.", show_alert=True)
         return
@@ -77,8 +89,7 @@ async def shop_plan(cb: CallbackQuery):
     except TelegramBadRequest:
         await cb.message.answer(txt, reply_markup=pay_kb(plid))
 
-
-# ---- Account / Orders ----
+# ===== حساب کاربری / سفارش‌ها =====
 @router.callback_query(F.data == "account")
 async def account_info(cb: CallbackQuery):
     u = cb.from_user
@@ -91,39 +102,45 @@ async def account_info(cb: CallbackQuery):
     except TelegramBadRequest:
         await cb.message.answer(txt, reply_markup=back_home_kb())
 
-
 @router.callback_query(F.data == "orders_me")
 async def my_orders(cb: CallbackQuery):
-    rows = await fetchall("""SELECT o.id, o.tracking_code, o.status, p.title as plan_title, pr.title as product_title, p.price
-                              FROM orders o
-                              JOIN plans p ON p.id=o.plan_id
-                              JOIN products pr ON pr.id=o.product_id
-                              JOIN users u ON u.id=o.user_id
-                              WHERE u.tg_id=?
-                              ORDER BY o.id DESC LIMIT 10""", cb.from_user.id)
+    rows = await fetchall(
+        """SELECT o.id, o.tracking_code, o.status, p.title as plan_title, pr.title as product_title, p.price
+           FROM orders o
+           JOIN plans p ON p.id=o.plan_id
+           JOIN products pr ON pr.id=p.product_id
+           JOIN users u ON u.id=o.user_id
+           WHERE u.tg_id=?
+           ORDER BY o.id DESC LIMIT 10""",
+        cb.from_user.id,
+    )
     if not rows:
         msg = "هنوز سفارشی ندارید."
     else:
         parts = []
         for r in rows:
-            parts.append(f"#{r['id']} | {r['status']} | کد: {r['tracking_code'] or '—'}\n{r['product_title']} - {r['plan_title']} | {r['price']:,} تومان")
-        msg = "🧾 سفارش‌های اخیر شما:
-" + "\n\n".join(parts)
+            parts.append(
+                f"""#{r['id']} | {r['status']} | کد: {r['tracking_code'] or '—'}
+{r['product_title']} - {r['plan_title']} | {r['price']:,} تومان"""
+            )
+        msg = "🧾 سفارش‌های اخیر شما:\n" + "\n\n".join(parts)
     try:
         await cb.message.edit_text(msg, reply_markup=back_home_kb())
     except TelegramBadRequest:
         await cb.message.answer(msg, reply_markup=back_home_kb())
 
-# ---- Channel / Support ----
+# ===== کانال / پشتیبانی =====
 @router.callback_query(F.data == "channel")
 async def show_channel(cb: CallbackQuery):
     url = await get_setting("MAIN_CHANNEL", None)
     if not url:
-        await cb.answer("کانال اصلی تنظیم نشده.", show_alert=True); return
+        await cb.answer("کانال اصلی تنظیم نشده.", show_alert=True)
+        return
     await cb.message.answer(f"📣 کانال ما: {url}")
 
 @router.callback_query(F.data == "support")
 async def show_support(cb: CallbackQuery):
     sup = await get_setting("SUPPORT_USERNAME", None)
-    if sup and not sup.startswith("@"): sup = "@" + sup
+    if sup and not sup.startswith("@"):
+        sup = "@" + sup
     await cb.message.answer(f"🆘 پشتیبانی: {sup or '@support'}")
