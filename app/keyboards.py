@@ -1,71 +1,139 @@
-from aiogram.types import ReplyKeyboardMarkup, KeyboardButton, InlineKeyboardMarkup, InlineKeyboardButton
+# -*- coding: utf-8 -*-
 from aiogram.utils.keyboard import InlineKeyboardBuilder
-from .texts import *
+from aiogram.types import InlineKeyboardMarkup
 
-def main_menu():
-    kb = ReplyKeyboardMarkup(
-        keyboard=[[KeyboardButton(text=MENU_STORE)],
-                  [KeyboardButton(text=MENU_ACCOUNT), KeyboardButton(text=MENU_SUPPORT)],
-                  [KeyboardButton(text=MENU_CHANNEL)]],
-        resize_keyboard=True
-    )
-    return kb
+def main_menu(is_admin: bool) -> InlineKeyboardMarkup:
+    kb = InlineKeyboardBuilder()
+    kb.button(text="🛍️ فروشگاه", callback_data="store")
+    kb.button(text="👤 حساب", callback_data="account")
+    kb.button(text="🆘 پشتیبانی", callback_data="support")
+    if is_admin:
+        kb.button(text="پنل مدیریت 🛠️", callback_data="admin:menu")
+    kb.adjust(2, 1)
+    return kb.as_markup()
 
-def categories_kb(cats):
-    builder = InlineKeyboardBuilder()
+def back_home_kb() -> InlineKeyboardMarkup:
+    kb = InlineKeyboardBuilder()
+    kb.button(text="⬅️ بازگشت", callback_data="home")
+    return kb.as_markup()
+
+def categories_kb(items):
+    kb = InlineKeyboardBuilder()
+    for r in items:
+        kb.button(text=f"📦 {r['title']}", callback_data=f"cat:{r['id']}")
+    kb.button(text="⬅️ منوی اصلی", callback_data="home")
+    kb.adjust(1)
+    return kb.as_markup()
+
+def products_kb(items, cat_id: int):
+    kb = InlineKeyboardBuilder()
+    for r in items:
+        kb.button(text=f"🧩 {r['title']}", callback_data=f"prod:{r['id']}")
+    kb.button(text="⬅️ دسته‌ها", callback_data="store")
+    kb.adjust(1)
+    return kb.as_markup()
+
+def plans_kb(items, product_id: int):
+    kb = InlineKeyboardBuilder()
+    for r in items:
+        kb.button(text=f"💠 {r['title']} - {r['price']:,} تومان", callback_data=f"plan:{r['id']}")
+    kb.button(text="⬅️ محصولات", callback_data=f"back:products:{product_id}")
+    kb.adjust(1)
+    return kb.as_markup()
+
+def pay_kb(plan_id: int):
+    kb = InlineKeyboardBuilder()
+    kb.button(text="پرداخت کارت به کارت 💳", callback_data=f"pay:{plan_id}")
+    kb.button(text="❌ لغو", callback_data="home")
+    kb.adjust(1)
+    return kb.as_markup()
+
+def proof_kb(order_id: int):
+    kb = InlineKeyboardBuilder()
+    kb.button(text="🧾 ارسال رسید", callback_data=f"proof:{order_id}")
+    kb.button(text="⬅️ منوی اصلی", callback_data="home")
+    kb.adjust(1)
+    return kb.as_markup()
+
+# Admin keyboards
+def admin_menu_kb():
+    kb = InlineKeyboardBuilder()
+    kb.button(text="📚 دسته‌ها", callback_data="admin:cats")
+    kb.button(text="🧩 محصولات", callback_data="admin:prods")
+    kb.button(text="💠 پلن‌ها", callback_data="admin:plans")
+    kb.button(text="🧾 سفارش‌ها", callback_data="admin:orders")
+    kb.button(text="⚙️ تنظیمات", callback_data="admin:settings")
+    kb.button(text="📨 پیام همگانی", callback_data="admin:broadcast_copy")
+    kb.button(text="🔁 فوروارد همگانی", callback_data="admin:broadcast_forward")
+    kb.button(text="⬅️ منوی اصلی", callback_data="home")
+    kb.adjust(2,2,2,2)
+    return kb.as_markup()
+
+def admin_cats_kb(cats):
+    kb = InlineKeyboardBuilder()
     for c in cats:
-        builder.button(text=f"{c.title} (#{c.id})", callback_data=f"cat:{c.id}")
-    return builder.as_markup()
+        kb.button(text=f"📦 {c['title']} ❌", callback_data=f"admin:del_cat:{c['id']}")
+    kb.button(text="➕ افزودن دسته", callback_data="admin:add_cat")
+    kb.button(text="⬅️ بازگشت", callback_data="admin:menu")
+    kb.adjust(1)
+    return kb.as_markup()
 
-def products_kb(products):
-    builder = InlineKeyboardBuilder()
-    for p in products:
-        status = "✅" if p.is_active else "⛔"
-        builder.button(text=f"{status} {p.title} (#{p.id})", callback_data=f"prod:{p.id}")
-    return builder.as_markup()
+def admin_prods_cats_kb(cats):
+    kb = InlineKeyboardBuilder()
+    for c in cats:
+        kb.button(text=f"📦 {c['title']}", callback_data=f"admin:prods_cat:{c['id']}")
+    kb.button(text="⬅️ بازگشت", callback_data="admin:menu")
+    kb.adjust(1)
+    return kb.as_markup()
 
-def plans_kb(plans):
-    builder = InlineKeyboardBuilder()
+def admin_prods_kb(prods, cat_id:int):
+    kb = InlineKeyboardBuilder()
+    for p in prods:
+        kb.button(text=f"🧩 {p['title']} ❌", callback_data=f"admin:del_prod:{p['id']}")
+    kb.button(text="➕ افزودن محصول", callback_data=f"admin:add_prod:{cat_id}")
+    kb.button(text="⬅️ انتخاب دسته", callback_data="admin:prods")
+    kb.adjust(1)
+    return kb.as_markup()
+
+def admin_plans_prod_kb(prods):
+    kb = InlineKeyboardBuilder()
+    for p in prods:
+        kb.button(text=f"🧩 {p['title']}", callback_data=f"admin:plans_prod:{p['id']}")
+    kb.button(text="⬅️ بازگشت", callback_data="admin:menu")
+    kb.adjust(1)
+    return kb.as_markup()
+
+def admin_plans_kb(plans, prod_id:int):
+    kb = InlineKeyboardBuilder()
     for pl in plans:
-        builder.button(text=f"{pl.title} - {int(pl.price)} تومان", callback_data=f"plan:{pl.id}")
-    return builder.as_markup()
-
-def payment_methods_kb(has_zp: bool, has_idpay: bool):
-    builder = InlineKeyboardBuilder()
-    builder.button(text=PAY_CARD_TO_CARD, callback_data="pay:c2c")
-    if has_zp:
-        builder.button(text=PAY_ZARINPAL, callback_data="pay:zarinpal")
-    if has_idpay:
-        builder.button(text=PAY_IDPAY, callback_data="pay:idpay")
-    builder.adjust(1)
-    return builder.as_markup()
-
-def admin_panel_kb():
-    kb = ReplyKeyboardMarkup(
-        keyboard=[
-            [KeyboardButton(text=ADMIN_MANAGE_CATS), KeyboardButton(text=ADMIN_MANAGE_PRODUCTS)],
-            [KeyboardButton(text=ADMIN_MANAGE_ORDERS)],
-            [KeyboardButton(text=ADMIN_SETTINGS)],
-            [KeyboardButton(text=ADMIN_BACK)]
-        ],
-        resize_keyboard=True
-    )
-    return kb
+        kb.button(text=f"💠 {pl['title']} - {pl['price']:,} ❌", callback_data=f"admin:del_plan:{pl['id']}")
+    kb.button(text="➕ افزودن پلن", callback_data=f"admin:add_plan:{prod_id}")
+    kb.button(text="⬅️ انتخاب محصول", callback_data="admin:plans")
+    kb.adjust(1)
+    return kb.as_markup()
 
 def admin_settings_kb():
-    builder = InlineKeyboardBuilder()
-    builder.button(text=ADMIN_SET_SUPPORT, callback_data="set:support")
-    builder.button(text=ADMIN_SET_CHANNEL, callback_data="set:channel")
-    builder.button(text=ADMIN_SET_CARD, callback_data="set:card")
-    builder.button(text=ADMIN_SET_ZARINPAL, callback_data="set:zp")
-    builder.button(text=ADMIN_SET_IDPAY, callback_data="set:idpay")
-    builder.adjust(1)
-    return builder.as_markup()
+    kb = InlineKeyboardBuilder()
+    kb.button(text="✏️ خوش‌آمدگویی", callback_data="admin:set:welcome")
+    kb.button(text="🆘 پشتیبانی", callback_data="admin:set:support")
+    kb.button(text="💳 شماره کارت", callback_data="admin:set:card")
+    kb.button(text="📣 کانال سفارش‌ها", callback_data="admin:set:channel")
+    kb.button(text="⬅️ بازگشت", callback_data="admin:menu")
+    kb.adjust(2,2,1)
+    return kb.as_markup()
 
+def admin_orders_kb(orders):
+    kb = InlineKeyboardBuilder()
+    for o in orders:
+        kb.button(text=f"#{o['id']} - {o['status']}", callback_data=f"admin:order:{o['id']}")
+    kb.button(text="⬅️ بازگشت", callback_data="admin:menu")
+    kb.adjust(1)
+    return kb.as_markup()
 
-def orders_actions_kb(oid: int):
-    builder = InlineKeyboardBuilder()
-    builder.button(text=ORDER_APPROVE, callback_data=f"order:approve:{oid}")
-    builder.button(text=ORDER_REJECT, callback_data=f"order:reject:{oid}")
-    builder.adjust(2)
-    return builder.as_markup()
+def admin_order_actions_kb(order_id:int):
+    kb = InlineKeyboardBuilder()
+    kb.button(text="✅ تایید", callback_data=f"admin:order_approve:{order_id}")
+    kb.button(text="❌ رد", callback_data=f"admin:order_reject:{order_id}")
+    kb.button(text="⬅️ بازگشت", callback_data="admin:orders")
+    kb.adjust(2,1)
+    return kb.as_markup()
