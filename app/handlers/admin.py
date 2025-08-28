@@ -21,7 +21,7 @@ from app.keyboards import (
 router = Router()
 
 class ProdStates(StatesGroup):
-    adding_title = State()(StatesGroup):
+    adding_title = State()
     adding_title = State()
 
 class PlanStates(StatesGroup):
