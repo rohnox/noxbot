@@ -29,3 +29,27 @@ async def notify_order(bot: Bot, order_id: int, user_mention: str, product: str,
     except Exception as e:
         print("Failed to send order notify (generic):", e)
         return False
+
+async def notify_order_proof(bot: Bot, order_id: int, user_mention: str, product: str, plan: str, price: int, proof_type: str, proof_value: str) -> bool:
+    channel = await _resolve_channel()
+    if not channel:
+        return False
+    caption = (
+        f"#سفارش_{order_id}\n"
+        f"کاربر: {user_mention}\n"
+        f"محصول: {product}\n"
+        f"پلن: {plan}\n"
+        f"قیمت: {price:,} تومان\n"
+        f"وضعیت: reviewing\n"
+        f"رسید: {proof_type or '—'}"
+    )
+    try:
+        if proof_type == "photo" and proof_value:
+            await bot.send_photo(chat_id=channel, photo=proof_value, caption=caption)
+        else:
+            text = caption + (f"\n\nمتن رسید:\n{proof_value}" if proof_value else "")
+            await bot.send_message(chat_id=channel, text=text, disable_web_page_preview=True)
+        return True
+    except Exception as e:
+        print("Failed to send order proof:", e)
+        return False

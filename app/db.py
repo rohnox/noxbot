@@ -43,6 +43,7 @@ async def init_db() -> None:
         proof_type TEXT DEFAULT NULL,
         proof_value TEXT DEFAULT NULL,
         created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        note TEXT DEFAULT NULL,
         FOREIGN KEY(user_id) REFERENCES users(id),
         FOREIGN KEY(product_id) REFERENCES products(id),
         FOREIGN KEY(plan_id) REFERENCES plans(id)
@@ -51,6 +52,12 @@ async def init_db() -> None:
         key TEXT PRIMARY KEY,
         value TEXT
     )""")
+    
+    # Safe ALTERs (idempotent)
+    try:
+        await _DB.execute("ALTER TABLE orders ADD COLUMN note TEXT DEFAULT NULL")
+    except Exception:
+        pass
     await _DB.commit()
 
 async def get_db() -> aiosqlite.Connection:

@@ -6,7 +6,7 @@ def main_menu(is_admin: bool, main_channel_url: str | None = None) -> InlineKeyb
     kb = InlineKeyboardBuilder()
     kb.button(text="🛍️ فروشگاه", callback_data="store")
     if main_channel_url:
-        kb.button(text="📣 کانال اصلی", url=main_channel_url)
+        kb.button(text="📣 کانال ما", url=main_channel_url)
     kb.button(text="👤 حساب", callback_data="account")
     kb.button(text="🆘 پشتیبانی", callback_data="support")
     if is_admin:
@@ -138,4 +138,12 @@ def admin_order_actions_kb(order_id:int):
     kb.button(text="❌ رد", callback_data=f"admin:order_reject:{order_id}")
     kb.button(text="⬅️ بازگشت", callback_data="admin:orders")
     kb.adjust(2,1)
+    return kb.as_markup()
+
+def plan_summary_kb(plan_id: int):
+    kb = InlineKeyboardBuilder()
+    kb.button(text="✍️ افزودن توضیح", callback_data=f"note:add:{plan_id}")
+    kb.button(text="ادامه پرداخت 💳", callback_data=f"pay:{plan_id}")
+    kb.button(text="❌ لغو", callback_data="home")
+    kb.adjust(1)
     return kb.as_markup()
