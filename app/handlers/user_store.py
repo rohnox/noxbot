@@ -7,13 +7,17 @@ from aiogram.fsm.context import FSMContext
 from app import texts
 from app.db import fetchall, fetchone, execute, get_or_create_user_id, get_setting
 from app.config import settings
-from app.keyboards import products_kb, plans_kb, plan_summary_kb, pay_kb, proof_kb, back_home_kb
+from app.keyboards import products_kb, plans_kb, pay_kb, proof_kb, back_home_kb
 from app.services.orders import notify_order, notify_order_proof
 
 router = Router()
 
+def _gen_tracking():
+    import random, string
+    return ''.join(random.choices(string.ascii_uppercase + string.digits, k=8))
+
+
 class OrderStates(StatesGroup):
-    waiting_note = State()
     waiting_proof = State()
 
 @router.callback_query(F.data == "store")
@@ -38,35 +42,19 @@ async def product_pick(c: CallbackQuery):
 @router.callback_query(F.data.startswith("plan:"))
 async def plan_pick(c: CallbackQuery, state: FSMContext):
     plan_id = int(c.data.split(":")[1])
-    plan = await fetchone("SELECT p.id as plan_id, p.title as plan_title, p.price, pr.title as product_title, pr.id as product_id FROM plans p JOIN products pr ON pr.id=p.product_id WHERE p.id=?", plan_id)
+    plan = await fetchone("SELECT p.id as plan_id, p.title as plan_title, p.price, p.description, pr.title as product_title, pr.id as product_id FROM plans p JOIN products pr ON pr.id=p.product_id WHERE p.id=?", plan_id)
     if not plan:
         await c.answer("نامعتبر", show_alert=True)
         return
     await state.update_data(plan_id=plan_id, product_id=plan["product_id"], note=None)
-    txt = texts.STORE_SUMMARY.format(product=plan["product_title"], plan=plan["plan_title"], price=plan["price"]) + "\\n\\n" + texts.CONTINUE_TO_PAY
-    await c.message.edit_text(txt, reply_markup=plan_summary_kb(plan_id))
-
-@router.callback_query(F.data.startswith("note:add:"))
-async def add_note_btn(c: CallbackQuery, state: FSMContext):
-    await state.set_state(OrderStates.waiting_note)
-    await c.message.edit_text(texts.ADD_NOTE_PROMPT, reply_markup=back_home_kb())
-
-@router.message(OrderStates.waiting_note, F.text)
-async def receive_note(m: Message, state: FSMContext):
-    await state.update_data(note=m.text.strip())
-    await m.answer(texts.NOTE_SAVED, reply_markup=back_home_kb())
-    await state.clear()
-
-@router.message(OrderStates.waiting_note, F.text.in_({'/skip','/SKIP'}))
-async def skip_note(m: Message, state: FSMContext):
-    await state.update_data(note=None)
-    await m.answer("رد شد. بدون توضیح ادامه دهید.", reply_markup=back_home_kb())
-    await state.clear()
+    desc = (plan['description'] or '').strip()
+    txt = texts.STORE_SUMMARY.format(product=plan["product_title"], plan=plan["plan_title"], price=plan["price"]) + (f"\n\n📝 توضیح پلن: {desc}" if desc else '') + "\\n\\n" + texts.CONTINUE_TO_PAY
+    await c.message.edit_text(txt, reply_markup=pay_kb(plan_id))
 
 @router.callback_query(F.data.startswith("pay:"))
 async def pay_cb(c: CallbackQuery, state: FSMContext):
     plan_id = int(c.data.split(":")[1])
-    plan = await fetchone("SELECT p.id as plan_id, p.title as plan_title, p.price, pr.title as product_title, pr.id as product_id FROM plans p JOIN products pr ON pr.id=p.product_id WHERE p.id=?", plan_id)
+    plan = await fetchone("SELECT p.id as plan_id, p.title as plan_title, p.price, p.description, pr.title as product_title, pr.id as product_id FROM plans p JOIN products pr ON pr.id=p.product_id WHERE p.id=?", plan_id)
     if not plan:
         await c.answer("نامعتبر", show_alert=True)
         return
@@ -78,10 +66,10 @@ async def pay_cb(c: CallbackQuery, state: FSMContext):
                              user_id, plan["product_id"], plan_id, "awaiting_proof", note)
     # اعلان اولیه سفارش
     mention = f"<a href='tg://user?id={c.from_user.id}'>{c.from_user.first_name or 'user'}</a>"
-    ok = await notify_order(c.bot, order_id, mention, plan["product_title"], plan["plan_title"], int(plan["price"]))
+    ok = await notify_order(c.bot, order_id, mention, plan["product_title"], plan["plan_title"], int(plan["price"]), trk, c.from_user.id, c.from_user.username)
     card = await get_setting("card_number", settings.card_number or "")
     card = card or "—"
-    info = texts.CARD_INFO.format(price=plan["price"], card=card)
+    info = texts.TRACKING_ASSIGNED.format(trk=trk) + "\n\n" + texts.CARD_INFO.format(price=plan["price"], card=card)
     if note:
         info += f"\\n\\nتوضیح شما: {note}"
     if not ok:
@@ -104,13 +92,13 @@ async def proof_photo(m: Message, state: FSMContext):
         return
     file_id = m.photo[-1].file_id
     await execute("UPDATE orders SET proof_type=?, proof_value=?, status='reviewing' WHERE id=?", "photo", file_id, order_id)
-    plan = await fetchone("""SELECT o.id, o.note, p.title as plan_title, p.price, pr.title as product_title, u.tg_id, u.first_name, u.username
+    plan = await fetchone("""SELECT o.id, o.tracking_code, p.title as plan_title, p.price, pr.title as product_title, u.tg_id, u.first_name, u.username
                              FROM orders o
                              JOIN plans p ON p.id=o.plan_id
                              JOIN products pr ON pr.id=o.product_id
                              JOIN users u ON u.id=o.user_id WHERE o.id=?""", order_id)
     user_mention = f"<a href='tg://user?id={plan['tg_id']}'>{plan['first_name'] or 'user'}</a> (@{plan['username'] or '-'})"
-    await notify_order_proof(m.bot, order_id, user_mention, plan["product_title"], plan["plan_title"], int(plan["price"]), "photo", file_id)
+    await notify_order_proof(m.bot, order_id, user_mention, plan["product_title"], plan["plan_title"], int(plan["price"]), plan['tracking_code'], plan['tg_id'], plan['username'], "photo", file_id)
     if plan["note"]:
         try:
             await m.bot.send_message(chat_id=await get_setting("order_channel", None), text=f"📝 توضیح کاربر برای #سفارش_{order_id}:\n{plan['note']}")
@@ -127,13 +115,13 @@ async def proof_text(m: Message, state: FSMContext):
         await m.answer("سفارش نامعتبر است.", reply_markup=back_home_kb())
         return
     await execute("UPDATE orders SET proof_type=?, proof_value=?, status='reviewing' WHERE id=?", "text", m.text, order_id)
-    plan = await fetchone("""SELECT o.id, o.note, p.title as plan_title, p.price, pr.title as product_title, u.tg_id, u.first_name, u.username
+    plan = await fetchone("""SELECT o.id, o.tracking_code, p.title as plan_title, p.price, pr.title as product_title, u.tg_id, u.first_name, u.username
                              FROM orders o
                              JOIN plans p ON p.id=o.plan_id
                              JOIN products pr ON pr.id=o.product_id
                              JOIN users u ON u.id=o.user_id WHERE o.id=?""", order_id)
     user_mention = f"<a href='tg://user?id={plan['tg_id']}'>{plan['first_name'] or 'user'}</a> (@{plan['username'] or '-'})"
-    await notify_order_proof(m.bot, order_id, user_mention, plan["product_title"], plan["plan_title"], int(plan["price"]), "text", m.text)
+    await notify_order_proof(m.bot, order_id, user_mention, plan["product_title"], plan["plan_title"], int(plan["price"]), plan['tracking_code'], plan['tg_id'], plan['username'], "text", m.text)
     if plan["note"]:
         try:
             await m.bot.send_message(chat_id=await get_setting("order_channel", None), text=f"📝 توضیح کاربر برای #سفارش_{order_id}:\n{plan['note']}")
@@ -141,3 +129,34 @@ async def proof_text(m: Message, state: FSMContext):
             pass
     await m.answer(texts.PROOF_SAVED, reply_markup=back_home_kb())
     await state.clear()
+
+
+@router.callback_query(F.data == "orders:mine")
+async def my_orders(c: CallbackQuery):
+    rows = await fetchall("SELECT o.id, o.tracking_code, o.status FROM orders o JOIN users u ON u.id=o.user_id WHERE u.tg_id=? ORDER BY o.id DESC LIMIT 5", c.from_user.id)
+    if not rows:
+        await c.message.edit_text("هیچ سفارشی ثبت نکرده‌اید.", reply_markup=back_home_kb())
+        return
+    from app.keyboards import orders_list_kb
+    await c.message.edit_text("📦 سفارشات من (۵ مورد اخیر):", reply_markup=orders_list_kb(rows))
+
+@router.callback_query(F.data.startswith("order:detail:"))
+async def order_detail(c: CallbackQuery):
+    oid = int(c.data.split(":")[2])
+    row = await fetchone("""SELECT o.id, o.tracking_code, o.status, p.title as plan_title, p.price, p.description, pr.title as product_title
+                              FROM orders o 
+                              JOIN plans p ON p.id=o.plan_id 
+                              JOIN products pr ON pr.id=o.product_id
+                              WHERE o.id=?""", oid)
+    if not row:
+        await c.answer("یافت نشد.", show_alert=True)
+        return
+    desc = (row['description'] or '').strip()
+    txt = (f"جزئیات سفارش #{row['id']}\n"
+           f"کد پیگیری: {row['tracking_code']}\n"
+           f"محصول: {row['product_title']}\n"
+           f"پلن: {row['plan_title']}\n"
+           f"توضیح پلن: {desc if desc else '—'}\n"
+           f"قیمت: {row['price']:,} تومان\n"
+           f"وضعیت: {row['status']}")
+    await c.message.edit_text(txt, reply_markup=back_home_kb())

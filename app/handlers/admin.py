@@ -24,6 +24,7 @@ class ProdStates(StatesGroup):
 class PlanStates(StatesGroup):
     adding_title = State()
     adding_price = State()
+    adding_desc = State()
 
 class SettingsStates(StatesGroup):
     set_welcome = State()
@@ -174,9 +175,30 @@ async def admin_add_plan_price(m: Message, state: FSMContext):
     data = await state.get_data()
     prod_id = data.get("prod_id")
     title = data.get("plan_title")
-    await execute("INSERT INTO plans(product_id, title, price) VALUES(?,?,?)", prod_id, title, price)
+    await state.update_data(plan_price=price)
+    await state.set_state(PlanStates.adding_desc)
+    await m.answer("توضیح پلن را ارسال کنید (اختیاری). برای خالی گذاشتن /skip بزنید.")
+
+@router.message(PlanStates.adding_desc, F.text)
+async def admin_add_plan_desc(m: Message, state: FSMContext):
+    data = await state.get_data()
+    prod_id = data.get("prod_id")
+    title = data.get("plan_title")
+    price = data.get("plan_price")
+    desc = (m.text or "").strip()
+    await execute("INSERT INTO plans(product_id, title, price, description) VALUES(?,?,?,?)", prod_id, title, price, desc)
     await state.clear()
     await m.answer("✅ پلن اضافه شد.", reply_markup=admin_menu_kb())
+
+@router.message(PlanStates.adding_desc, F.text.in_({'/skip','/SKIP'}))
+async def admin_add_plan_desc_skip(m: Message, state: FSMContext):
+    data = await state.get_data()
+    prod_id = data.get("prod_id")
+    title = data.get("plan_title")
+    price = data.get("plan_price")
+    await execute("INSERT INTO plans(product_id, title, price, description) VALUES(?,?,?,?)", prod_id, title, price, '')
+    await state.clear()
+    await m.answer("✅ پلن اضافه شد (بدون توضیح).", reply_markup=admin_menu_kb())
 
 @router.callback_query(F.data.startswith("admin:del_plan:"))
 async def admin_del_plan(cb: CallbackQuery):
@@ -217,7 +239,7 @@ async def admin_order_details(cb: CallbackQuery):
            f"رسید: {row['proof_type'] or '—'}")
     await cb.message.edit_text(txt, reply_markup=admin_order_actions_kb(oid))
 
-@router.callback_query(F.data.startswith("admin:order_approve:"))
+@router.callback_query(F.data.startswith("admin:order_processing:"))
 async def admin_order_approve(cb: CallbackQuery):
     if not await guard_admin(cb):
         return
@@ -357,3 +379,34 @@ async def admin_broadcast_forward_message(m: Message, state: FSMContext):
             pass
     await state.clear()
     await m.answer(f"ارسال به {sent} کاربر انجام شد.", reply_markup=admin_menu_kb())
+
+
+@router.callback_query(F.data.startswith("admin:order_processing:"))
+async def admin_order_processing(cb: CallbackQuery):
+    if not await guard_admin(cb):
+        return
+    oid = int(cb.data.split(":")[2])
+    await execute("UPDATE orders SET status='processing' WHERE id=?", oid)
+    row = await fetchone("SELECT tracking_code, u.tg_id FROM orders o JOIN users u ON u.id=o.user_id WHERE o.id=?", oid)
+    if row and row["tg_id"]:
+        try:
+            await cb.bot.send_message(row["tg_id"], f"🔧 سفارش شما با کد پیگیری {row['tracking_code']} در حال انجام است.")
+        except Exception:
+            pass
+    await cb.answer("🔧 به حالت در حال انجام تغییر کرد")
+    await admin_orders(cb)
+
+@router.callback_query(F.data.startswith("admin:order_complete:"))
+async def admin_order_complete(cb: CallbackQuery):
+    if not await guard_admin(cb):
+        return
+    oid = int(cb.data.split(":")[2])
+    await execute("UPDATE orders SET status='completed' WHERE id=?", oid)
+    row = await fetchone("SELECT tracking_code, u.tg_id FROM orders o JOIN users u ON u.id=o.user_id WHERE o.id=?", oid)
+    if row and row["tg_id"]:
+        try:
+            await cb.bot.send_message(row["tg_id"], f"🎉 سفارش شما با کد پیگیری {row['tracking_code']} انجام شد.")
+        except Exception:
+            pass
+    await cb.answer("✅ اتمام کار ثبت شد")
+    await admin_orders(cb)

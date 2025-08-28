@@ -8,13 +8,14 @@ async def _resolve_channel():
     val = await get_setting("order_channel", settings.order_channel or "")
     return val or settings.order_channel
 
-async def notify_order(bot: Bot, order_id: int, user_mention: str, product: str, plan: str, price: int) -> bool:
+async def notify_order(bot: Bot, order_id: int, user_mention: str, product: str, plan: str, price: int, tracking: str, user_id: int, username: str | None) -> bool:
     channel = await _resolve_channel()
     if not channel:
         return False
     text = (
         f"#سفارش_{order_id}\n"
-        f"کاربر: {user_mention}\n"
+        f"کد پیگیری: {tracking}\n"
+        f"کاربر: {user_mention} (ID: {user_id}, @{username or '-'})\n"
         f"محصول: {product}\n"
         f"پلن: {plan}\n"
         f"قیمت: {price:,} تومان\n"
