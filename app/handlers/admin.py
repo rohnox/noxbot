@@ -236,7 +236,11 @@ async def admin_find_by_trk_start(cb: CallbackQuery, state: FSMContext):
     if not await guard_admin(cb):
         return
     await state.set_state(FindStates.waiting_trk)
-    await cb.message.edit_text("کد پیگیری سفارش را ارسال کنید:", reply_markup=admin_menu_kb())
+    try:
+        await cb.message.edit_text("کد پیگیری سفارش را ارسال کنید:", reply_markup=admin_menu_kb())
+    except Exception:
+        # Avoid TelegramBadRequest: message is not modified
+        await cb.message.answer("کد پیگیری سفارش را ارسال کنید:", reply_markup=admin_menu_kb())
 
 @router.message(FindStates.waiting_trk, F.text)
 async def admin_find_by_trk_recv(m: Message, state: FSMContext):

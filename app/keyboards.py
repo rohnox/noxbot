@@ -1,6 +1,23 @@
 # -*- coding: utf-8 -*-
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 
+def main_menu(is_admin: bool = False):
+    kb = InlineKeyboardBuilder()
+    kb.button(text="🛍️ فروشگاه", callback_data="shop")
+    kb.button(text="📦 سفارشات من", callback_data="orders_me")
+    kb.button(text="👤 حساب کاربری", callback_data="account")
+    kb.button(text="📣 کانال ما", callback_data="channel")
+    kb.button(text="🆘 پشتیبانی", callback_data="support")
+    if is_admin:
+        kb.button(text="🛠️ پنل مدیریت", callback_data="admin:menu")
+    kb.adjust(2,2,1,1)
+    return kb.as_markup()
+
+def back_home_kb():
+    kb = InlineKeyboardBuilder()
+    kb.button(text="🏠 منوی اصلی", callback_data="home")
+    return kb.as_markup()
+
 def admin_menu_kb():
     kb = InlineKeyboardBuilder()
     kb.button(text="📦 محصولات", callback_data="admin:prods")
