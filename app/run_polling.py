@@ -1,4 +1,4 @@
-# app/run_polling.py
+cat > app/run_polling.py <<'PY'
 import asyncio
 from .bot import bot, dp
 from .db import SessionLocal, engine, Base
@@ -12,11 +12,9 @@ class DBMiddleware:
             return await handler(event, data)
 
 async def main():
-    # ایجاد جداول
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
 
-    # ثبت میدل‌ویر و روترها
     dp.update.middleware(DBMiddleware())
     dp.include_router(user_router)
     dp.include_router(admin_router)
@@ -26,3 +24,4 @@ async def main():
 
 if __name__ == "__main__":
     asyncio.run(main())
+PY
