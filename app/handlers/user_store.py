@@ -43,6 +43,23 @@ async def _notify_new_order(bot, order_id: int):
     dest = await get_setting("ORDER_CHANNEL", None)
     if not dest:
         return False
+
+    mention = f"<a href='tg://user?id={row['tg_id']}'>{row['first_name'] or 'کاربر'}</a>"
+    txt = f"""📥 سفارش جدید #{row['id']}
+#️⃣ کد پیگیری: {row['tracking_code']}
+👤 کاربر: {mention}
+🔖 یوزرنیم: @{row['username'] or '-'}
+🆔 آیدی عددی: {row['tg_id']}
+📦 محصول: {row['product_title']}
+💠 پلن: {row['plan_title']}
+💵 قیمت: {row['price']:,} تومان"""
+
+    try:
+        await bot.send_message(dest, txt, parse_mode="HTML")
+        return True
+    except Exception:
+        return False
+
     mention = f"<a href='tg://user?id={row['tg_id']}'>{row['first_name'] or 'کاربر'}</a>"
     txt = f"""📥 سفارش جدید #{row['id']}
 کد پیگیری: {row['tracking_code']}
