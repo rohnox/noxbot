@@ -3,6 +3,7 @@ from aiogram import Router, F
 from aiogram.types import CallbackQuery, Message
 from aiogram.fsm.state import StatesGroup, State
 from aiogram.fsm.context import FSMContext
+from aiogram.exceptions import TelegramBadRequest
 
 from app.db import fetchall, fetchone, execute, get_setting
 from app.keyboards import (
@@ -47,7 +48,10 @@ async def admin_menu(cb: CallbackQuery, state: FSMContext):
         await state.clear()
     except Exception:
         pass
-    await cb.message.edit_text("پنل مدیریت:", reply_markup=admin_menu_kb())
+    try:
+        await cb.message.edit_text("پنل مدیریت:", reply_markup=admin_menu_kb())
+    except TelegramBadRequest:
+        await cb.message.answer("پنل مدیریت:", reply_markup=admin_menu_kb())
 
 # ---------- Products ----------
 @router.callback_query(F.data == "admin:prods")
@@ -55,14 +59,20 @@ async def admin_prods(cb: CallbackQuery):
     if not await guard_admin(cb):
         return
     prods = await fetchall("SELECT id, title FROM products ORDER BY id DESC")
-    await cb.message.edit_text("📦 مدیریت محصولات:", reply_markup=admin_prods_kb(prods))
+    try:
+        await cb.message.edit_text("📦 مدیریت محصولات:", reply_markup=admin_prods_kb(prods))
+    except TelegramBadRequest:
+        await cb.message.answer("📦 مدیریت محصولات:", reply_markup=admin_prods_kb(prods))
 
 @router.callback_query(F.data == "admin:add_prod")
 async def admin_add_prod(cb: CallbackQuery, state: FSMContext):
     if not await guard_admin(cb):
         return
     await state.set_state(ProdStates.adding_title)
-    await cb.message.edit_text("عنوان محصول را ارسال کنید (یا /cancel):")
+    try:
+        await cb.message.edit_text("عنوان محصول را ارسال کنید (یا /cancel):")
+    except TelegramBadRequest:
+        await cb.message.answer("عنوان محصول را ارسال کنید (یا /cancel):")
 
 @router.message(ProdStates.adding_title, F.text)
 async def admin_add_prod_title(m: Message, state: FSMContext):
@@ -82,7 +92,10 @@ async def admin_del_prod(cb: CallbackQuery):
     pid = int(cb.data.split(":")[2])
     await execute("DELETE FROM products WHERE id=?", pid)
     prods = await fetchall("SELECT id, title FROM products ORDER BY id DESC")
-    await cb.message.edit_text("📦 مدیریت محصولات:", reply_markup=admin_prods_kb(prods))
+    try:
+        await cb.message.edit_text("📦 مدیریت محصولات:", reply_markup=admin_prods_kb(prods))
+    except TelegramBadRequest:
+        await cb.message.answer("📦 مدیریت محصولات:", reply_markup=admin_prods_kb(prods))
 
 # ---------- Plans ----------
 @router.callback_query(F.data == "admin:plans")
@@ -91,9 +104,15 @@ async def admin_plans(cb: CallbackQuery):
         return
     prods = await fetchall("SELECT id, title FROM products ORDER BY id DESC")
     if not prods:
-        await cb.message.edit_text("هنوز محصولی ندارید. از «📦 محصولات» یک محصول اضافه کنید.", reply_markup=admin_menu_kb())
+        try:
+            await cb.message.edit_text("هنوز محصولی ندارید. از «📦 محصولات» یک محصول اضافه کنید.", reply_markup=admin_menu_kb())
+        except TelegramBadRequest:
+            await cb.message.answer("هنوز محصولی ندارید. از «📦 محصولات» یک محصول اضافه کنید.", reply_markup=admin_menu_kb())
         return
-    await cb.message.edit_text("یک محصول را برای مدیریت پلن‌ها انتخاب کنید:", reply_markup=admin_plans_prod_kb(prods))
+    try:
+        await cb.message.edit_text("یک محصول را برای مدیریت پلن‌ها انتخاب کنید:", reply_markup=admin_plans_prod_kb(prods))
+    except TelegramBadRequest:
+        await cb.message.answer("یک محصول را برای مدیریت پلن‌ها انتخاب کنید:", reply_markup=admin_plans_prod_kb(prods))
 
 @router.callback_query(F.data.startswith("admin:plans_for_prod:"))
 async def admin_plans_for_prod(cb: CallbackQuery, state: FSMContext):
@@ -103,7 +122,10 @@ async def admin_plans_for_prod(cb: CallbackQuery, state: FSMContext):
     await state.update_data(prod_id=pid)
     plans = await fetchall("SELECT id, title, price FROM plans WHERE product_id=? ORDER BY price ASC", pid)
     txt = "💠 پلن‌های این محصول:\n" + ("(خالی)" if not plans else "\n".join([f"- {p['title']} | {p['price']:,} تومان" for p in plans]))
-    await cb.message.edit_text(txt + "\n\nبرای افزودن پلن، عنوان را ارسال کنید.", reply_markup=admin_menu_kb())
+    try:
+        await cb.message.edit_text(txt + "\n\nبرای افزودن پلن، عنوان را ارسال کنید.", reply_markup=admin_menu_kb())
+    except TelegramBadRequest:
+        await cb.message.answer(txt + "\n\nبرای افزودن پلن، عنوان را ارسال کنید.", reply_markup=admin_menu_kb())
     await state.set_state(PlanStates.adding_title)
 
 @router.message(PlanStates.adding_title, F.text)
@@ -153,7 +175,10 @@ async def admin_orders(cb: CallbackQuery):
     if not await guard_admin(cb):
         return
     orders = await fetchall("SELECT id, status FROM orders ORDER BY id DESC LIMIT 20")
-    await cb.message.edit_text("🧾 ۲۰ سفارش اخیر:", reply_markup=admin_orders_kb(orders))
+    try:
+        await cb.message.edit_text("🧾 ۲۰ سفارش اخیر:", reply_markup=admin_orders_kb(orders))
+    except TelegramBadRequest:
+        await cb.message.answer("🧾 ۲۰ سفارش اخیر:", reply_markup=admin_orders_kb(orders))
 
 @router.callback_query(F.data.startswith("admin:order_view:"))
 async def admin_order_view(cb: CallbackQuery):
@@ -171,7 +196,10 @@ async def admin_order_view(cb: CallbackQuery):
     txt = (f"سفارش #{row['id']}\nکد پیگیری: {row['tracking_code'] or '—'}\n"
            f"محصول: {row['product_title']}\nپلن: {row['plan_title']}\n"
            f"قیمت: {row['price']:,} تومان\nوضعیت: {row['status']}")
-    await cb.message.edit_text(txt, reply_markup=admin_order_actions_kb(row['id']))
+    try:
+        await cb.message.edit_text(txt, reply_markup=admin_order_actions_kb(row['id']))
+    except TelegramBadRequest:
+        await cb.message.answer(txt, reply_markup=admin_order_actions_kb(row['id']))
 
 async def _gen_tracking():
     import random, string
@@ -202,7 +230,7 @@ async def admin_order_complete(cb: CallbackQuery):
     oid = int(cb.data.split(":")[2])
     await execute("UPDATE orders SET status='completed' WHERE id=?", oid)
     row = await fetchone("SELECT tracking_code, u.tg_id FROM orders o JOIN users u ON u.id=o.user_id WHERE o.id=?", oid)
-    trk = row["tracking_code"] or await _gen_tracking()
+    trk = row["tracking_code"]or await _gen_tracking()
     if not row["tracking_code"]:
         await execute("UPDATE orders SET tracking_code=? WHERE id=?", trk, oid)
     if row and row["tg_id"]:
@@ -238,8 +266,7 @@ async def admin_find_by_trk_start(cb: CallbackQuery, state: FSMContext):
     await state.set_state(FindStates.waiting_trk)
     try:
         await cb.message.edit_text("کد پیگیری سفارش را ارسال کنید:", reply_markup=admin_menu_kb())
-    except Exception:
-        # Avoid TelegramBadRequest: message is not modified
+    except TelegramBadRequest:
         await cb.message.answer("کد پیگیری سفارش را ارسال کنید:", reply_markup=admin_menu_kb())
 
 @router.message(FindStates.waiting_trk, F.text)
@@ -265,7 +292,10 @@ async def admin_broadcast_copy(cb: CallbackQuery, state: FSMContext):
     if not await guard_admin(cb):
         return
     await state.set_state(BroadcastStates.waiting_copy)
-    await cb.message.edit_text("پیامی که باید «کپی» شود را ارسال کنید.", reply_markup=admin_menu_kb())
+    try:
+        await cb.message.edit_text("پیامی که باید «کپی» شود را ارسال کنید.", reply_markup=admin_menu_kb())
+    except TelegramBadRequest:
+        await cb.message.answer("پیامی که باید «کپی» شود را ارسال کنید.", reply_markup=admin_menu_kb())
 
 @router.message(BroadcastStates.waiting_copy)
 async def broadcast_copy_message(m: Message, state: FSMContext):
@@ -285,7 +315,10 @@ async def admin_broadcast_forward(cb: CallbackQuery, state: FSMContext):
     if not await guard_admin(cb):
         return
     await state.set_state(BroadcastStates.waiting_forward)
-    await cb.message.edit_text("پیامی که باید «فوروارد» شود را ارسال کنید.", reply_markup=admin_menu_kb())
+    try:
+        await cb.message.edit_text("پیامی که باید «فوروارد» شود را ارسال کنید.", reply_markup=admin_menu_kb())
+    except TelegramBadRequest:
+        await cb.message.answer("پیامی که باید «فوروارد» شود را ارسال کنید.", reply_markup=admin_menu_kb())
 
 @router.message(BroadcastStates.waiting_forward)
 async def broadcast_forward_message(m: Message, state: FSMContext):

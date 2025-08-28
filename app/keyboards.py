@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 
+# ===== User menus =====
 def main_menu(is_admin: bool = False):
     kb = InlineKeyboardBuilder()
     kb.button(text="🛍️ فروشگاه", callback_data="shop")
@@ -18,6 +19,21 @@ def back_home_kb():
     kb.button(text="🏠 منوی اصلی", callback_data="home")
     return kb.as_markup()
 
+def pay_kb(plan_id: int):
+    kb = InlineKeyboardBuilder()
+    kb.button(text="💳 پرداخت کارت به کارت", callback_data=f"pay:{plan_id}")
+    kb.button(text="⬅️ بازگشت", callback_data="shop")
+    kb.adjust(1,1)
+    return kb.as_markup()
+
+def proof_kb(order_id: int):
+    kb = InlineKeyboardBuilder()
+    kb.button(text="🧾 ارسال رسید", callback_data=f"proof:{order_id}")
+    kb.button(text="❌ انصراف", callback_data="home")
+    kb.adjust(1,1)
+    return kb.as_markup()
+
+# ===== Admin menus =====
 def admin_menu_kb():
     kb = InlineKeyboardBuilder()
     kb.button(text="📦 محصولات", callback_data="admin:prods")
@@ -34,10 +50,11 @@ def admin_menu_kb():
 def admin_prods_kb(prods):
     kb = InlineKeyboardBuilder()
     for p in prods:
-        kb.button(text=f"🧩 {p['title']} ❌", callback_data=f"admin:del_prod:{p['id']}")
+        kb.button(text=f"🧩 {p['title']}  •  ❌ حذف", callback_data=f"admin:del_prod:{p['id']}")
+        kb.button(text=f"💠 پلن‌های «{p['title']}»", callback_data=f"admin:plans_for_prod:{p['id']}")
     kb.button(text="➕ افزودن محصول", callback_data="admin:add_prod")
     kb.button(text="⬅️ بازگشت", callback_data="admin:menu")
-    kb.adjust(1)
+    kb.adjust(1,1,1,1)
     return kb.as_markup()
 
 def admin_plans_prod_kb(prods):
