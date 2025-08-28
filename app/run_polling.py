@@ -3,10 +3,7 @@ import asyncio
 import logging
 from app.bot import create_bot_and_dispatcher
 
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s | %(levelname)s | %(name)s | %(message)s"
-)
+logging.basicConfig(level=logging.INFO, format="%(asctime)s | %(levelname)s | %(name)s | %(message)s")
 
 async def main():
     bot, dp = await create_bot_and_dispatcher()

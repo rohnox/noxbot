@@ -1,13 +1,12 @@
 # -*- coding: utf-8 -*-
 from aiogram import Router, F
 from aiogram.types import CallbackQuery, Message
-from aiogram.filters import Command
 from aiogram.fsm.state import StatesGroup, State
 from aiogram.fsm.context import FSMContext
 
 from app import texts
-from app.config import is_admin, settings
-from app.db import fetchall, fetchone, execute, set_setting, get_setting
+from app.config import is_admin
+from app.db import fetchall, fetchone, execute, set_setting
 from app.keyboards import (
     admin_menu_kb, admin_cats_kb, admin_prods_cats_kb, admin_prods_kb,
     admin_plans_prod_kb, admin_plans_kb, admin_settings_kb,
@@ -16,44 +15,39 @@ from app.keyboards import (
 
 router = Router()
 
-# ---- States ----
 class CatStates(StatesGroup):
     adding = State()
 
 class ProdStates(StatesGroup):
     adding_title = State()
-    add_cat_id = State()
 
 class PlanStates(StatesGroup):
     adding_title = State()
     adding_price = State()
-    add_prod_id = State()
 
 class SettingsStates(StatesGroup):
     set_welcome = State()
     set_support = State()
     set_card = State()
     set_channel = State()
+    set_main_channel = State()
 
 class BroadcastStates(StatesGroup):
     copy_all = State()
     forward_all = State()
 
-# ---- Access guard ----
 async def guard_admin(cb: CallbackQuery) -> bool:
     if not is_admin(cb.from_user.id):
         await cb.answer(texts.ADMIN_NEED, show_alert=True)
         return False
     return True
 
-# ---- Menu ----
 @router.callback_query(F.data == "admin:menu")
 async def admin_menu(cb: CallbackQuery):
     if not await guard_admin(cb):
         return
     await cb.message.edit_text(texts.ADMIN_MENU_TEXT, reply_markup=admin_menu_kb())
 
-# ---- Categories ----
 @router.callback_query(F.data == "admin:cats")
 async def admin_cats(cb: CallbackQuery):
     if not await guard_admin(cb):
@@ -86,7 +80,6 @@ async def admin_del_cat(cb: CallbackQuery):
     await execute("DELETE FROM categories WHERE id=?", cat_id)
     await admin_cats(cb)
 
-# ---- Products ----
 @router.callback_query(F.data == "admin:prods")
 async def admin_prods(cb: CallbackQuery):
     if not await guard_admin(cb):
@@ -134,7 +127,6 @@ async def admin_del_prod(cb: CallbackQuery):
     await execute("DELETE FROM products WHERE id=?", pid)
     await admin_prods(cb)
 
-# ---- Plans ----
 @router.callback_query(F.data == "admin:plans")
 async def admin_plans(cb: CallbackQuery):
     if not await guard_admin(cb):
@@ -194,7 +186,6 @@ async def admin_del_plan(cb: CallbackQuery):
     await execute("DELETE FROM plans WHERE id=?", plan_id)
     await admin_plans(cb)
 
-# ---- Orders ----
 @router.callback_query(F.data == "admin:orders")
 async def admin_orders(cb: CallbackQuery):
     if not await guard_admin(cb):
@@ -232,11 +223,10 @@ async def admin_order_approve(cb: CallbackQuery):
         return
     oid = int(cb.data.split(":")[2])
     await execute("UPDATE orders SET status='approved' WHERE id=?", oid)
-    # notify user
     row = await fetchone("SELECT u.tg_id FROM orders o JOIN users u ON u.id=o.user_id WHERE o.id=?", oid)
     if row:
         try:
-            await cb.bot.send_message(row["tg_id"], texts.ORDER_APPROVED_USER)
+            await cb.bot.send_message(row["tg_id"], "✅ سفارش شما تایید شد.")
         except Exception:
             pass
     await cb.answer("✅ تایید شد")
@@ -248,17 +238,15 @@ async def admin_order_reject(cb: CallbackQuery):
         return
     oid = int(cb.data.split(":")[2])
     await execute("UPDATE orders SET status='rejected' WHERE id=?", oid)
-    # notify user
     row = await fetchone("SELECT u.tg_id FROM orders o JOIN users u ON u.id=o.user_id WHERE o.id=?", oid)
     if row:
         try:
-            await cb.bot.send_message(row["tg_id"], texts.ORDER_REJECTED_USER)
+            await cb.bot.send_message(row["tg_id"], "❌ سفارش شما رد شد. لطفاً با پشتیبانی در ارتباط باشید.")
         except Exception:
             pass
     await cb.answer("❌ رد شد")
     await admin_orders(cb)
 
-# ---- Settings ----
 @router.callback_query(F.data == "admin:settings")
 async def admin_settings(cb: CallbackQuery):
     if not await guard_admin(cb):
@@ -270,64 +258,75 @@ async def admin_set_welcome(cb: CallbackQuery, state: FSMContext):
     if not await guard_admin(cb):
         return
     await state.set_state(SettingsStates.set_welcome)
-    await cb.message.edit_text(texts.SET_WELCOME_PROMPT)
+    await cb.message.edit_text("متن جدید خوش‌آمدگویی را ارسال کنید.")
 
 @router.message(SettingsStates.set_welcome, F.text)
 async def admin_set_welcome_text(m: Message, state: FSMContext):
     await set_setting("welcome_text", m.text)
     await state.clear()
-    await m.answer("✅ متن خوش‌آمدگویی ذخیره شد.", reply_markup=admin_menu_kb())
+    await m.answer("✅ متن خوش‌آمدگویی ذخیره شد.", reply_markup=admin_settings_kb())
 
 @router.callback_query(F.data == "admin:set:support")
 async def admin_set_support(cb: CallbackQuery, state: FSMContext):
     if not await guard_admin(cb):
         return
     await state.set_state(SettingsStates.set_support)
-    await cb.message.edit_text(texts.SET_SUPPORT_PROMPT)
+    await cb.message.edit_text("یوزرنیم پشتیبانی (بدون @) را ارسال کنید.")
 
 @router.message(SettingsStates.set_support, F.text)
 async def admin_set_support_text(m: Message, state: FSMContext):
     await set_setting("support_username", m.text.strip().lstrip("@"))
     await state.clear()
-    await m.answer("✅ پشتیبانی ذخیره شد.", reply_markup=admin_menu_kb())
+    await m.answer("✅ پشتیبانی ذخیره شد.", reply_markup=admin_settings_kb())
 
 @router.callback_query(F.data == "admin:set:card")
 async def admin_set_card(cb: CallbackQuery, state: FSMContext):
     if not await guard_admin(cb):
         return
     await state.set_state(SettingsStates.set_card)
-    await cb.message.edit_text(texts.SET_CARD_PROMPT)
+    await cb.message.edit_text("شماره کارت جدید را ارسال کنید.")
 
 @router.message(SettingsStates.set_card, F.text)
 async def admin_set_card_text(m: Message, state: FSMContext):
     await set_setting("card_number", m.text.strip())
     await state.clear()
-    await m.answer("✅ شماره کارت ذخیره شد.", reply_markup=admin_menu_kb())
+    await m.answer("✅ شماره کارت ذخیره شد.", reply_markup=admin_settings_kb())
 
 @router.callback_query(F.data == "admin:set:channel")
 async def admin_set_channel(cb: CallbackQuery, state: FSMContext):
     if not await guard_admin(cb):
         return
     await state.set_state(SettingsStates.set_channel)
-    await cb.message.edit_text(texts.SET_CHANNEL_PROMPT)
+    await cb.message.edit_text("یوزرنیم/آیدی کانال سفارش‌ها را ارسال کنید (مثال: @my_orders یا -100...).")
 
 @router.message(SettingsStates.set_channel, F.text)
 async def admin_set_channel_text(m: Message, state: FSMContext):
     await set_setting("order_channel", m.text.strip())
     await state.clear()
-    await m.answer("✅ کانال سفارش‌ها ذخیره شد.", reply_markup=admin_menu_kb())
+    await m.answer("✅ کانال سفارش‌ها ذخیره شد.", reply_markup=admin_settings_kb())
 
-# ---- Broadcast ----
+@router.callback_query(F.data == "admin:set:main_channel")
+async def admin_set_main_channel(cb: CallbackQuery, state: FSMContext):
+    if not await guard_admin(cb):
+        return
+    await state.set_state(SettingsStates.set_main_channel)
+    await cb.message.edit_text("یوزرنیم کانال اصلی (برای نمایش در منو) را ارسال کنید. مثال: @my_main_channel")
+
+@router.message(SettingsStates.set_main_channel, F.text)
+async def admin_set_main_channel_text(m: Message, state: FSMContext):
+    await set_setting("main_channel", m.text.strip())
+    await state.clear()
+    await m.answer("✅ کانال اصلی ذخیره شد.", reply_markup=admin_settings_kb())
+
 @router.callback_query(F.data == "admin:broadcast_copy")
 async def admin_broadcast_copy(cb: CallbackQuery, state: FSMContext):
     if not await guard_admin(cb):
         return
     await state.set_state(BroadcastStates.copy_all)
-    await cb.message.edit_text(texts.BROADCAST_COPY_PROMPT)
+    await cb.message.edit_text("پیام یا رسانه‌ای که می‌خواهید \"کپی همگانی\" شود را ارسال کنید.")
 
 @router.message(BroadcastStates.copy_all)
 async def admin_broadcast_copy_message(m: Message, state: FSMContext):
-    # send copy to all users
     users = await fetchall("SELECT tg_id FROM users ORDER BY id DESC")
     sent = 0
     for u in users:
@@ -337,14 +336,14 @@ async def admin_broadcast_copy_message(m: Message, state: FSMContext):
         except Exception:
             pass
     await state.clear()
-    await m.answer(texts.BROADCAST_DONE.format(n=sent), reply_markup=admin_menu_kb())
+    await m.answer(f"ارسال به {sent} کاربر انجام شد.", reply_markup=admin_menu_kb())
 
 @router.callback_query(F.data == "admin:broadcast_forward")
 async def admin_broadcast_forward(cb: CallbackQuery, state: FSMContext):
     if not await guard_admin(cb):
         return
     await state.set_state(BroadcastStates.forward_all)
-    await cb.message.edit_text(texts.BROADCAST_FORWARD_PROMPT)
+    await cb.message.edit_text("پیام را از جایی فوروارد کنید تا به همه ارسال شود.")
 
 @router.message(BroadcastStates.forward_all)
 async def admin_broadcast_forward_message(m: Message, state: FSMContext):
@@ -357,4 +356,4 @@ async def admin_broadcast_forward_message(m: Message, state: FSMContext):
         except Exception:
             pass
     await state.clear()
-    await m.answer(texts.BROADCAST_DONE.format(n=sent), reply_markup=admin_menu_kb())
+    await m.answer(f"ارسال به {sent} کاربر انجام شد.", reply_markup=admin_menu_kb())

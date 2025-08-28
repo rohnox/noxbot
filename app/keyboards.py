@@ -2,14 +2,16 @@
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 from aiogram.types import InlineKeyboardMarkup
 
-def main_menu(is_admin: bool) -> InlineKeyboardMarkup:
+def main_menu(is_admin: bool, main_channel_url: str | None = None) -> InlineKeyboardMarkup:
     kb = InlineKeyboardBuilder()
     kb.button(text="🛍️ فروشگاه", callback_data="store")
+    if main_channel_url:
+        kb.button(text="📣 کانال اصلی", url=main_channel_url)
     kb.button(text="👤 حساب", callback_data="account")
     kb.button(text="🆘 پشتیبانی", callback_data="support")
     if is_admin:
         kb.button(text="پنل مدیریت 🛠️", callback_data="admin:menu")
-    kb.adjust(2, 1)
+    kb.adjust(2, 2)
     return kb.as_markup()
 
 def back_home_kb() -> InlineKeyboardMarkup:
@@ -55,7 +57,6 @@ def proof_kb(order_id: int):
     kb.adjust(1)
     return kb.as_markup()
 
-# Admin keyboards
 def admin_menu_kb():
     kb = InlineKeyboardBuilder()
     kb.button(text="📚 دسته‌ها", callback_data="admin:cats")
@@ -118,8 +119,9 @@ def admin_settings_kb():
     kb.button(text="🆘 پشتیبانی", callback_data="admin:set:support")
     kb.button(text="💳 شماره کارت", callback_data="admin:set:card")
     kb.button(text="📣 کانال سفارش‌ها", callback_data="admin:set:channel")
+    kb.button(text="📢 کانال اصلی", callback_data="admin:set:main_channel")
     kb.button(text="⬅️ بازگشت", callback_data="admin:menu")
-    kb.adjust(2,2,1)
+    kb.adjust(2,2,2)
     return kb.as_markup()
 
 def admin_orders_kb(orders):

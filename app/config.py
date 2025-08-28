@@ -15,7 +15,6 @@ def _parse_admins(val: str) -> List[int]:
         try:
             out.append(int(p))
         except ValueError:
-            # Ignore non-int parts silently
             pass
     return out
 
@@ -24,6 +23,7 @@ class Settings:
     bot_token: str = os.getenv("BOT_TOKEN", "").strip()
     admins: List[int] = field(default_factory=lambda: _parse_admins(os.getenv("ADMINS", "")))
     order_channel: Optional[str] = os.getenv("ORDER_CHANNEL", "").strip() or None
+    main_channel: Optional[str] = os.getenv("MAIN_CHANNEL", "").strip() or None
     welcome_text: str = os.getenv("WELCOME_TEXT", "سلام! به فروشگاه خوش اومدی ✨").strip()
     support_username: str = os.getenv("SUPPORT_USERNAME", "").strip()
     card_number: str = os.getenv("CARD_NUMBER", "").strip()

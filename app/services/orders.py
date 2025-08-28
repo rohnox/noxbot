@@ -8,10 +8,10 @@ async def _resolve_channel():
     val = await get_setting("order_channel", settings.order_channel or "")
     return val or settings.order_channel
 
-async def notify_order(bot: Bot, order_id: int, user_mention: str, product: str, plan: str, price: int):
+async def notify_order(bot: Bot, order_id: int, user_mention: str, product: str, plan: str, price: int) -> bool:
     channel = await _resolve_channel()
     if not channel:
-        return
+        return False
     text = (
         f"#سفارش_{order_id}\n"
         f"کاربر: {user_mention}\n"
@@ -22,6 +22,10 @@ async def notify_order(bot: Bot, order_id: int, user_mention: str, product: str,
     )
     try:
         await bot.send_message(chat_id=channel, text=text, disable_web_page_preview=True)
+        return True
     except TelegramBadRequest as e:
-        # اگر دسترسی کانال مشکل دارد، چیزی crash نشود
         print("Failed to send order notify:", e)
+        return False
+    except Exception as e:
+        print("Failed to send order notify (generic):", e)
+        return False

@@ -1,7 +1,6 @@
 # -*- coding: utf-8 -*-
 import aiosqlite
-from typing import Optional, Any, Dict, List
-import asyncio
+from typing import Optional, List
 
 _DB: Optional[aiosqlite.Connection] = None
 _DB_PATH = "bot.db"
@@ -10,57 +9,45 @@ async def init_db() -> None:
     global _DB
     _DB = await aiosqlite.connect(_DB_PATH)
     await _DB.execute("PRAGMA foreign_keys=ON;")
-    # users
-    await _DB.execute("""
-    CREATE TABLE IF NOT EXISTS users(
+    await _DB.execute("""CREATE TABLE IF NOT EXISTS users(
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         tg_id INTEGER UNIQUE,
         first_name TEXT,
         username TEXT,
         is_admin INTEGER DEFAULT 0
     )""")
-    # categories
-    await _DB.execute("""
-    CREATE TABLE IF NOT EXISTS categories(
+    await _DB.execute("""CREATE TABLE IF NOT EXISTS categories(
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         title TEXT NOT NULL
     )""")
-    # products
-    await _DB.execute("""
-    CREATE TABLE IF NOT EXISTS products(
+    await _DB.execute("""CREATE TABLE IF NOT EXISTS products(
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         category_id INTEGER NOT NULL,
         title TEXT NOT NULL,
         description TEXT DEFAULT '',
         FOREIGN KEY(category_id) REFERENCES categories(id) ON DELETE CASCADE
     )""")
-    # plans
-    await _DB.execute("""
-    CREATE TABLE IF NOT EXISTS plans(
+    await _DB.execute("""CREATE TABLE IF NOT EXISTS plans(
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         product_id INTEGER NOT NULL,
         title TEXT NOT NULL,
         price INTEGER NOT NULL,
         FOREIGN KEY(product_id) REFERENCES products(id) ON DELETE CASCADE
     )""")
-    # orders
-    await _DB.execute("""
-    CREATE TABLE IF NOT EXISTS orders(
+    await _DB.execute("""CREATE TABLE IF NOT EXISTS orders(
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         user_id INTEGER NOT NULL,
         product_id INTEGER NOT NULL,
         plan_id INTEGER NOT NULL,
-        status TEXT NOT NULL DEFAULT 'awaiting_proof', -- awaiting_proof, reviewing, approved, rejected
-        proof_type TEXT DEFAULT NULL,  -- 'text' | 'photo' | NULL
-        proof_value TEXT DEFAULT NULL, -- text content OR photo file_id
+        status TEXT NOT NULL DEFAULT 'awaiting_proof',
+        proof_type TEXT DEFAULT NULL,
+        proof_value TEXT DEFAULT NULL,
         created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
         FOREIGN KEY(user_id) REFERENCES users(id),
         FOREIGN KEY(product_id) REFERENCES products(id),
         FOREIGN KEY(plan_id) REFERENCES plans(id)
     )""")
-    # settings
-    await _DB.execute("""
-    CREATE TABLE IF NOT EXISTS settings(
+    await _DB.execute("""CREATE TABLE IF NOT EXISTS settings(
         key TEXT PRIMARY KEY,
         value TEXT
     )""")
@@ -72,7 +59,7 @@ async def get_db() -> aiosqlite.Connection:
         await init_db()
     return _DB
 
-async def fetchone(query: str, *params) -> Optional[aiosqlite.Row]:
+async def fetchone(query: str, *params):
     db = await get_db()
     db.row_factory = aiosqlite.Row
     async with db.execute(query, params) as cursor:
@@ -92,9 +79,9 @@ async def execute(query: str, *params) -> int:
 
 async def set_setting(key: str, value: str) -> None:
     await execute("""INSERT INTO settings(key, value) VALUES(?,?)
-                      ON CONFLICT(key) DO UPDATE SET value=excluded.value""", key, value)
+                     ON CONFLICT(key) DO UPDATE SET value=excluded.value""", key, value)
 
-async def get_setting(key: str, default: Optional[str] = None) -> Optional[str]:
+async def get_setting(key: str, default=None):
     row = await fetchone("SELECT value FROM settings WHERE key=?", key)
     return row["value"] if row and "value" in row.keys() and row["value"] is not None else default
 

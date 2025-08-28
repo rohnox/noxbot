@@ -3,7 +3,6 @@ from aiogram import Router, F
 from aiogram.types import CallbackQuery, Message
 from aiogram.fsm.state import StatesGroup, State
 from aiogram.fsm.context import FSMContext
-from aiogram.utils.markdown import hlink
 
 from app import texts
 from app.db import fetchall, fetchone, execute, get_or_create_user_id, get_setting
@@ -70,14 +69,19 @@ async def pay_cb(c: CallbackQuery, state: FSMContext):
     if not plan:
         await c.answer("نامعتبر", show_alert=True)
         return
-    # Create order awaiting proof
     tg_user_id = c.from_user.id
     user_id = await get_or_create_user_id(tg_user_id)
     order_id = await execute("INSERT INTO orders(user_id, product_id, plan_id, status) VALUES(?,?,?,?)",
                              user_id, plan["product_id"], plan_id, "awaiting_proof")
+
+    # Notify channel immediately that a new order started (before proof)
+    user_mention = f"<a href='tg://user?id={c.from_user.id}'>{c.from_user.first_name or 'user'}</a>"
+    ok = await notify_order(c.bot, order_id, user_mention, plan["product_title"], plan["plan_title"], int(plan["price"]))
     card = await get_setting("card_number", settings.card_number or "")
     card = card or "—"
     info = texts.CARD_INFO.format(price=plan["price"], card=card)
+    if not ok:
+        info = "⚠️ اعلان به کانال سفارش‌ها ارسال نشد (ربات باید ادمین کانال باشد یا کانال درست تنظیم شود).\n\n" + info
     await c.message.edit_text(info, reply_markup=proof_kb(order_id))
 
 @router.callback_query(F.data.startswith("proof:"))
@@ -97,7 +101,6 @@ async def proof_photo(m: Message, state: FSMContext):
     photo = m.photo[-1]
     file_id = photo.file_id
     await execute("UPDATE orders SET proof_type=?, proof_value=?, status='reviewing' WHERE id=?", "photo", file_id, order_id)
-    # Notify channel
     plan = await fetchone("""SELECT o.id, p.title as plan_title, p.price, pr.title as product_title, u.tg_id, u.first_name
                              FROM orders o
                              JOIN plans p ON p.id=o.plan_id
