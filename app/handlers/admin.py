@@ -72,9 +72,28 @@ async def admin_prods(cb: CallbackQuery):
     if not await guard_admin(cb):
         return
     prods = await fetchall("SELECT id, title FROM products ORDER BY id DESC")
-    await cb.message.edit_text("📦 مدیریت محصولات:", reply_markup=admin_prods_kb(prods))
+    await cb.message.edit_text("مدیریت محصولات:", reply_markup=admin_prods_kb(prods))
 
-@router.callback_query(F.data.startswith("admin:prods_cat:"))
+@router.callback_query(F.data == "admin:add_prod")
+async def admin_add_prod(cb: CallbackQuery, state: FSMContext):
+    if not await guard_admin(cb):
+        return
+    await state.set_state(ProdStates.adding_title)
+    await cb.message.edit_text("عنوان محصول را ارسال کنید (یا /cancel):")
+
+@router.message(ProdStates.adding_title, F.text)
+async def admin_add_prod_title(m: Message, state: FSMContext):
+    title = (m.text or "").strip()
+    if not title:
+        await m.answer("❌ عنوان نامعتبر است.")
+        return
+    await execute("INSERT INTO products(title) VALUES(?)", title)
+    await state.clear()
+    # Refresh list
+    prods = await fetchall("SELECT id, title FROM products ORDER BY id DESC")
+    await m.answer("✅ محصول اضافه شد.", reply_markup=admin_prods_kb(prods))
+
+@outer.callback_query(F.data.startswith("admin:prods_cat:"))
 async def admin_prods_for_cat(cb: CallbackQuery):
     if not await guard_admin(cb):
         return

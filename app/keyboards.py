@@ -60,15 +60,14 @@ def proof_kb(order_id: int):
 
 def admin_menu_kb():
     kb = InlineKeyboardBuilder()
-    kb.button(text="📚 دسته‌ها", callback_data="admin:cats")
-    kb.button(text="🧩 محصولات", callback_data="admin:prods")
+    kb.button(text="📦 محصولات", callback_data="admin:prods")
     kb.button(text="💠 پلن‌ها", callback_data="admin:plans")
     kb.button(text="🧾 سفارش‌ها", callback_data="admin:orders")
     kb.button(text="⚙️ تنظیمات", callback_data="admin:settings")
     kb.button(text="📨 پیام همگانی", callback_data="admin:broadcast_copy")
     kb.button(text="🔁 فوروارد همگانی", callback_data="admin:broadcast_forward")
     kb.button(text="⬅️ منوی اصلی", callback_data="home")
-    kb.adjust(2,2,2,2)
+    kb.adjust(2,2,2,1)
     return kb.as_markup()
 
 
