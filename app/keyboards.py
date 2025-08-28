@@ -28,7 +28,7 @@ def categories_kb(items):
     kb.adjust(1)
     return kb.as_markup()
 
-def products_kb(items, _cat_id_unused: int | None = None):
+def products_kb(items, __unused: int | None = None):
     kb = InlineKeyboardBuilder()
     for r in items:
         kb.button(text=f"🧩 {r['title']}", callback_data=f"prod:{r['id']}")
@@ -79,7 +79,7 @@ def admin_prods_kb(prods):
     kb = InlineKeyboardBuilder()
     for p in prods:
         kb.button(text=f"🧩 {p['title']} ❌", callback_data=f"admin:del_prod:{p['id']}")
-    kb.button(text="➕ افزودن محصول", callback_data=f"admin:add_prod:{cat_id}")
+    kb.button(text="➕ افزودن محصول", callback_data="admin:add_prod")
     kb.button(text="⬅️ بازگشت", callback_data="admin:menu")
     kb.adjust(1)
     return kb.as_markup()
