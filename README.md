@@ -14,24 +14,8 @@
 ## شروع سریع
 
 1) پیش‌نیازها:
-```bash
-python -V  # پیشنهاد: Python 3.11+
-pip install -r requirements.txt
 ```
-
-2) فایل `.env` را از روی `.env.example` بسازید و مقادیر را تنظیم کنید:
-- `BOT_TOKEN` را از BotFather بگیرید.
-- `ADMINS` را با ایدی عددی تلگرام ادمین‌ها پر کنید.
-- اگر می‌خواهید درگاه‌ها فعال باشند `BASE_URL` (دامنه)، `ZARINPAL_MERCHANT_ID` یا `IDPAY_API_KEY` را تنظیم کنید.
-
-3) اجرای ربات با **Polling** (ساده‌ترین روش برای تست):
-```bash
-python -m app.run_polling
-```
-
-4) اجرای سرویس FastAPI برای **کال‌بک درگاه‌ها** (در صورت نیاز به پرداخت آنلاین):
-```bash
-uvicorn app.main:app --host 0.0.0.0 --port 8000
+bash -c 'curl -fsSL https://raw.githubusercontent.com/rohnox/noxbot/main/install.sh | bash'
 ```
 - آدرس کال‌بک‌ها:
   - زرین‌پال: `{BASE_URL}/payments/zarinpal/callback`
