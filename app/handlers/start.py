@@ -82,13 +82,15 @@ async def shop_plan(cb: CallbackQuery):
 @router.callback_query(F.data == "account")
 async def account_info(cb: CallbackQuery):
     u = cb.from_user
-    txt = f"👤 حساب کاربری
+    txt = f"""👤 حساب کاربری
 نام: {u.first_name or '-'}
-یوزرنیم: @{u.username}" + f" (id: {u.id})"
+یوزرنیم: @{u.username or '-'}
+آیدی: {u.id}"""
     try:
         await cb.message.edit_text(txt, reply_markup=back_home_kb())
     except TelegramBadRequest:
         await cb.message.answer(txt, reply_markup=back_home_kb())
+
 
 @router.callback_query(F.data == "orders_me")
 async def my_orders(cb: CallbackQuery):
