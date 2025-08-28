@@ -72,7 +72,7 @@ async def admin_prods(cb: CallbackQuery):
     if not await guard_admin(cb):
         return
     prods = await fetchall("SELECT id, title FROM products ORDER BY id DESC")
-    await cb.message.edit_text("مدیریت محصولات:", reply_markup=admin_prods_kb(prods))
+    await cb.message.edit_text("📦 مدیریت محصولات:", reply_markup=admin_prods_kb(prods))
 
 @router.callback_query(F.data.startswith("admin:prods_cat:"))
 async def admin_prods_for_cat(cb: CallbackQuery):
