@@ -160,11 +160,13 @@ async def _send_proof_to_channel(m: Message, order_id: int, kind: str, file_id: 
         return
     mention = f"<a href='tg://user?id={row['tg_id']}'>{row['first_name'] or 'کاربر'}</a>"
     caption = f"""🧾 رسید پرداخت برای سفارش #{row['id']}
-کد پیگیری: {row['tracking_code']}
-کاربر: {mention} @{row['username'] or '-'}
-محصول: {row['product_title']}
-پلن: {row['plan_title']}
-قیمت: {row['price']:,} تومان"""
+#️⃣ کد پیگیری: {row['tracking_code']}
+👤 کاربر: {mention}
+🔖 یوزرنیم: @{row['username'] or '-'}
+🆔 آیدی عددی: {row['tg_id']}
+📦 محصول: {row['product_title']}
+💠 پلن: {row['plan_title']}
+💵 قیمت: {row['price']:,} تومان"""
     try:
         if kind == "photo":
             await m.bot.send_photo(dest, photo=file_id, caption=caption, parse_mode="HTML")
@@ -172,3 +174,4 @@ async def _send_proof_to_channel(m: Message, order_id: int, kind: str, file_id: 
             await m.bot.send_document(dest, document=file_id, caption=caption, parse_mode="HTML")
     except Exception:
         pass
+
