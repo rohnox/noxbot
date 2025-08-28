@@ -21,7 +21,7 @@ from app.keyboards import (
 router = Router()
 
 class ProdStates(StatesGroup):
-    adding_title = State()
+    adding_title = State()(StatesGroup):
     adding_title = State()
 
 class PlanStates(StatesGroup):
@@ -55,7 +55,6 @@ async def admin_menu(cb: CallbackQuery):
 
 
 
-    await execute("INSERT INTO categories(title) VALUES(?)", title)
     await state.clear()
     await m.answer("✅ دسته اضافه شد.", reply_markup=admin_menu_kb())
 
@@ -64,7 +63,6 @@ async def admin_del_cat(cb: CallbackQuery):
     if not await guard_admin(cb):
         return
     cat_id = int(cb.data.split(":")[2])
-    await execute("DELETE FROM categories WHERE id=?", cat_id)
     await admin_cats(cb)
 
 @router.callback_query(F.data == "admin:prods")
@@ -93,7 +91,7 @@ async def admin_add_prod_title(m: Message, state: FSMContext):
     prods = await fetchall("SELECT id, title FROM products ORDER BY id DESC")
     await m.answer("✅ محصول اضافه شد.", reply_markup=admin_prods_kb(prods))
 
-@outer.callback_query(F.data.startswith("admin:prods_cat:"))
+@router.callback_query(F.data.startswith("admin:prods_cat:"))
 async def admin_prods_for_cat(cb: CallbackQuery):
     if not await guard_admin(cb):
         return
