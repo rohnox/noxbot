@@ -62,7 +62,8 @@ async def pay_cb(c: CallbackQuery, state: FSMContext):
     note = (data or {}).get("note")
     tg_user_id = c.from_user.id
     user_id = await get_or_create_user_id(tg_user_id)
-    order_id = await execute("INSERT INTO orders(user_id, product_id, plan_id, status, note) VALUES(?,?,?,?,?)",
+    trk = _gen_tracking()
+    order_id = await execute("INSERT INTO orders(user_id, product_id, plan_id, status, tracking_code) VALUES(?,?,?,?,?)",
                              user_id, plan["product_id"], plan_id, "awaiting_proof", note)
     # اعلان اولیه سفارش
     mention = f"<a href='tg://user?id={c.from_user.id}'>{c.from_user.first_name or 'user'}</a>"
