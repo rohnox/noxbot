@@ -26,7 +26,7 @@ def _gen_tracking():
 
 
 class ProdStates(StatesGroup):
-    adding_title = State()(StatesGroup):
+    adding_title = State()
     adding_title = State()
 
 class PlanStates(StatesGroup):
