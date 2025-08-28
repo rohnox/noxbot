@@ -9,7 +9,7 @@ from app.db import fetchall, fetchone, execute, get_setting
 from app.keyboards import (
     admin_menu_kb,
     admin_prods_kb,
-    admin_plans_prod_kb,
+    admin_plans_list_kb,
     admin_orders_kb,
     admin_order_actions_kb,
 )
@@ -28,11 +28,18 @@ async def guard_admin(cb: CallbackQuery) -> bool:
 # ---------- States ----------
 class ProdStates(StatesGroup):
     adding_title = State()
+    editing_title = State()
 
 class PlanStates(StatesGroup):
     adding_title = State()
     adding_price = State()
     adding_desc = State()
+
+class PlanEditStates(StatesGroup):
+    editing_plan_id = State()
+    editing_title = State()
+    editing_price = State()
+    editing_desc = State()
 
 class FindStates(StatesGroup):
     waiting_trk = State()
@@ -53,7 +60,7 @@ async def admin_menu(cb: CallbackQuery, state: FSMContext):
     except TelegramBadRequest:
         await cb.message.answer("پنل مدیریت:", reply_markup=admin_menu_kb())
 
-# ---------- Products ----------
+# ---------- Products CRUD ----------
 @router.callback_query(F.data == "admin:prods")
 async def admin_prods(cb: CallbackQuery):
     if not await guard_admin(cb):
@@ -85,6 +92,31 @@ async def admin_add_prod_title(m: Message, state: FSMContext):
     prods = await fetchall("SELECT id, title FROM products ORDER BY id DESC")
     await m.answer("✅ محصول اضافه شد.", reply_markup=admin_prods_kb(prods))
 
+@router.callback_query(F.data.startswith("admin:edit_prod:"))
+async def admin_edit_prod(cb: CallbackQuery, state: FSMContext):
+    if not await guard_admin(cb):
+        return
+    pid = int(cb.data.split(":")[2])
+    await state.update_data(prod_id=pid)
+    await state.set_state(ProdStates.editing_title)
+    try:
+        await cb.message.edit_text("✏️ عنوان جدید محصول را ارسال کنید:", reply_markup=admin_menu_kb())
+    except TelegramBadRequest:
+        await cb.message.answer("✏️ عنوان جدید محصول را ارسال کنید:", reply_markup=admin_menu_kb())
+
+@router.message(ProdStates.editing_title, F.text)
+async def admin_edit_prod_title(m: Message, state: FSMContext):
+    title = (m.text or "").strip()
+    if not title:
+        await m.answer("❌ عنوان نامعتبر است.")
+        return
+    data = await state.get_data()
+    pid = int(data.get("prod_id"))
+    await execute("UPDATE products SET title=? WHERE id=?", title, pid)
+    await state.clear()
+    prods = await fetchall("SELECT id, title FROM products ORDER BY id DESC")
+    await m.answer("✅ محصول ویرایش شد.", reply_markup=admin_prods_kb(prods))
+
 @router.callback_query(F.data.startswith("admin:del_prod:"))
 async def admin_del_prod(cb: CallbackQuery):
     if not await guard_admin(cb):
@@ -97,7 +129,7 @@ async def admin_del_prod(cb: CallbackQuery):
     except TelegramBadRequest:
         await cb.message.answer("📦 مدیریت محصولات:", reply_markup=admin_prods_kb(prods))
 
-# ---------- Plans ----------
+# ---------- Plans CRUD ----------
 @router.callback_query(F.data == "admin:plans")
 async def admin_plans(cb: CallbackQuery):
     if not await guard_admin(cb):
@@ -109,10 +141,11 @@ async def admin_plans(cb: CallbackQuery):
         except TelegramBadRequest:
             await cb.message.answer("هنوز محصولی ندارید. از «📦 محصولات» یک محصول اضافه کنید.", reply_markup=admin_menu_kb())
         return
+    # reuse products keyboard to jump into plan list per product
     try:
-        await cb.message.edit_text("یک محصول را برای مدیریت پلن‌ها انتخاب کنید:", reply_markup=admin_plans_prod_kb(prods))
+        await cb.message.edit_text("یک محصول را برای مدیریت پلن‌ها انتخاب کنید:", reply_markup=admin_prods_kb(prods))
     except TelegramBadRequest:
-        await cb.message.answer("یک محصول را برای مدیریت پلن‌ها انتخاب کنید:", reply_markup=admin_plans_prod_kb(prods))
+        await cb.message.answer("یک محصول را برای مدیریت پلن‌ها انتخاب کنید:", reply_markup=admin_prods_kb(prods))
 
 @router.callback_query(F.data.startswith("admin:plans_for_prod:"))
 async def admin_plans_for_prod(cb: CallbackQuery, state: FSMContext):
@@ -120,21 +153,34 @@ async def admin_plans_for_prod(cb: CallbackQuery, state: FSMContext):
         return
     pid = int(cb.data.split(":")[2])
     await state.update_data(prod_id=pid)
-    plans = await fetchall("SELECT id, title, price FROM plans WHERE product_id=? ORDER BY price ASC", pid)
-    txt = "💠 پلن‌های این محصول:\n" + ("(خالی)" if not plans else "\n".join([f"- {p['title']} | {p['price']:,} تومان" for p in plans]))
+    plans = await fetchall("SELECT id, title, price, description FROM plans WHERE product_id=? ORDER BY price ASC", pid)
+    txt = "💠 پلن‌های این محصول:
+" + ("(خالی)" if not plans else "
+".join([f"- {p['title']} | {p['price']:,} تومان" for p in plans]))
     try:
-        await cb.message.edit_text(txt + "\n\nبرای افزودن پلن، عنوان را ارسال کنید.", reply_markup=admin_menu_kb())
+        await cb.message.edit_text(txt, reply_markup=admin_plans_list_kb(plans, pid))
     except TelegramBadRequest:
-        await cb.message.answer(txt + "\n\nبرای افزودن پلن، عنوان را ارسال کنید.", reply_markup=admin_menu_kb())
+        await cb.message.answer(txt, reply_markup=admin_plans_list_kb(plans, pid))
+
+@router.callback_query(F.data.startswith("admin:add_plan:"))
+async def admin_add_plan(cb: CallbackQuery, state: FSMContext):
+    if not await guard_admin(cb):
+        return
+    pid = int(cb.data.split(":")[2])
+    await state.update_data(prod_id=pid)
     await state.set_state(PlanStates.adding_title)
+    try:
+        await cb.message.edit_text("عنوان پلن را ارسال کنید:", reply_markup=admin_menu_kb())
+    except TelegramBadRequest:
+        await cb.message.answer("عنوان پلن را ارسال کنید:", reply_markup=admin_menu_kb())
 
 @router.message(PlanStates.adding_title, F.text)
 async def admin_add_plan_title(m: Message, state: FSMContext):
-    title = (m.text or "").strip()
-    if not title:
+    t = (m.text or "").strip()
+    if not t:
         await m.answer("❌ عنوان نامعتبر است.")
         return
-    await state.update_data(plan_title=title)
+    await state.update_data(plan_title=t)
     await state.set_state(PlanStates.adding_price)
     await m.answer("قیمت پلن (تومان) را ارسال کنید (فقط عدد).")
 
@@ -146,30 +192,87 @@ async def admin_add_plan_price(m: Message, state: FSMContext):
         return
     await state.update_data(plan_price=int(price_text))
     await state.set_state(PlanStates.adding_desc)
-    await m.answer("توضیح پلن را ارسال کنید (اختیاری). برای خالی گذاشتن /skip بزنید.")
-
-@router.message(PlanStates.adding_desc, F.text.in_({'/skip','/SKIP'}))
-async def admin_add_plan_desc_skip(m: Message, state: FSMContext):
-    data = await state.get_data()
-    prod_id = data.get("prod_id")
-    title = data.get("plan_title")
-    price = data.get("plan_price")
-    await execute("INSERT INTO plans(product_id, title, price, description) VALUES(?,?,?,?)", prod_id, title, price, '')
-    await state.clear()
-    await m.answer("✅ پلن اضافه شد (بدون توضیح).", reply_markup=admin_menu_kb())
+    await m.answer("توضیح پلن را ارسال کنید.")
 
 @router.message(PlanStates.adding_desc, F.text)
 async def admin_add_plan_desc(m: Message, state: FSMContext):
     data = await state.get_data()
-    prod_id = data.get("prod_id")
+    pid = int(data.get("prod_id"))
     title = data.get("plan_title")
-    price = data.get("plan_price")
+    price = int(data.get("plan_price"))
     desc = (m.text or "").strip()
-    await execute("INSERT INTO plans(product_id, title, price, description) VALUES(?,?,?,?)", prod_id, title, price, desc)
+    await execute("INSERT INTO plans(product_id, title, price, description) VALUES(?,?,?,?)", pid, title, price, desc)
     await state.clear()
-    await m.answer("✅ پلن اضافه شد.", reply_markup=admin_menu_kb())
+    plans = await fetchall("SELECT id, title, price, description FROM plans WHERE product_id=? ORDER BY price ASC", pid)
+    await m.answer("✅ پلن اضافه شد.", reply_markup=admin_plans_list_kb(plans, pid))
 
-# ---------- Orders ----------
+@router.callback_query(F.data.startswith("admin:edit_plan:"))
+async def admin_edit_plan(cb: CallbackQuery, state: FSMContext):
+    if not await guard_admin(cb):
+        return
+    plan_id = int(cb.data.split(":")[2])
+    await state.update_data(edit_plan_id=plan_id)
+    await state.set_state(PlanEditStates.editing_title)
+    try:
+        await cb.message.edit_text("✏️ عنوان جدید پلن را ارسال کنید:", reply_markup=admin_menu_kb())
+    except TelegramBadRequest:
+        await cb.message.answer("✏️ عنوان جدید پلن را ارسال کنید:", reply_markup=admin_menu_kb())
+
+@router.message(PlanEditStates.editing_title, F.text)
+async def plan_edit_title(m: Message, state: FSMContext):
+    t = (m.text or "").strip()
+    if not t:
+        await m.answer("❌ عنوان نامعتبر است.")
+        return
+    data = await state.get_data()
+    pid = int(data.get("edit_plan_id"))
+    await execute("UPDATE plans SET title=? WHERE id=?", t, pid)
+    await state.set_state(PlanEditStates.editing_price)
+    await m.answer("💰 قیمت جدید (تومان) را ارسال کنید (فقط عدد).")
+
+@router.message(PlanEditStates.editing_price, F.text)
+async def plan_edit_price(m: Message, state: FSMContext):
+    price_text = (m.text or "").replace(",", "").strip()
+    if not price_text.isdigit():
+        await m.answer("❌ قیمت نامعتبر است. فقط عدد تومان ارسال کنید.")
+        return
+    price = int(price_text)
+    data = await state.get_data()
+    plid = int(data.get("edit_plan_id"))
+    await execute("UPDATE plans SET price=? WHERE id=?", price, plid)
+    await state.set_state(PlanEditStates.editing_desc)
+    await m.answer("📝 توضیح جدید پلن را ارسال کنید.")
+
+@router.message(PlanEditStates.editing_desc, F.text)
+async def plan_edit_desc(m: Message, state: FSMContext):
+    desc = (m.text or "").strip()
+    data = await state.get_data()
+    plid = int(data.get("edit_plan_id"))
+    await execute("UPDATE plans SET description=? WHERE id=?", desc, plid)
+    # find product id to reload list
+    row = await fetchone("SELECT product_id FROM plans WHERE id=?", plid)
+    pid = int(row["product_id"]) if row else 0
+    await state.clear()
+    plans = await fetchall("SELECT id, title, price, description FROM plans WHERE product_id=? ORDER BY price ASC", pid)
+    await m.answer("✅ پلن ویرایش شد.", reply_markup=admin_plans_list_kb(plans, pid))
+
+@router.callback_query(F.data.startswith("admin:del_plan:"))
+async def admin_del_plan(cb: CallbackQuery, state: FSMContext):
+    if not await guard_admin(cb):
+        return
+    plid = int(cb.data.split(":")[2])
+    row = await fetchone("SELECT product_id FROM plans WHERE id=?", plid)
+    pid = int(row["product_id"]) if row else 0
+    await execute("DELETE FROM plans WHERE id=?", plid)
+    plans = await fetchall("SELECT id, title, price, description FROM plans WHERE product_id=? ORDER BY price ASC", pid)
+    txt = "💠 پلن‌های این محصول:
+" + ("(خالی)" if not plans else "\n".join([f"- {p['title']} | {p['price']:,} تومان" for p in plans]))
+    try:
+        await cb.message.edit_text(txt, reply_markup=admin_plans_list_kb(plans, pid))
+    except TelegramBadRequest:
+        await cb.message.answer(txt, reply_markup=admin_plans_list_kb(plans, pid))
+
+# ---------- Orders (unchanged from prev versions) ----------
 @router.callback_query(F.data == "admin:orders")
 async def admin_orders(cb: CallbackQuery):
     if not await guard_admin(cb):
@@ -230,7 +333,7 @@ async def admin_order_complete(cb: CallbackQuery):
     oid = int(cb.data.split(":")[2])
     await execute("UPDATE orders SET status='completed' WHERE id=?", oid)
     row = await fetchone("SELECT tracking_code, u.tg_id FROM orders o JOIN users u ON u.id=o.user_id WHERE o.id=?", oid)
-    trk = row["tracking_code"]or await _gen_tracking()
+    trk = row["tracking_code"] or await _gen_tracking()
     if not row["tracking_code"]:
         await execute("UPDATE orders SET tracking_code=? WHERE id=?", trk, oid)
     if row and row["tg_id"]:

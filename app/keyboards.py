@@ -19,6 +19,22 @@ def back_home_kb():
     kb.button(text="🏠 منوی اصلی", callback_data="home")
     return kb.as_markup()
 
+def shop_products_kb(prods):
+    kb = InlineKeyboardBuilder()
+    for p in prods:
+        kb.button(text=f"🛒 {p['title']}", callback_data=f"product:{p['id']}")
+    kb.button(text="🏠 منوی اصلی", callback_data="home")
+    kb.adjust(1,1)
+    return kb.as_markup()
+
+def shop_plans_kb(plans, product_id: int):
+    kb = InlineKeyboardBuilder()
+    for pl in plans:
+        kb.button(text=f"💠 {pl['title']} | {pl['price']:,} تومان", callback_data=f"plan:{pl['id']}")
+    kb.button(text="⬅️ محصولات", callback_data="shop")
+    kb.adjust(1,1)
+    return kb.as_markup()
+
 def pay_kb(plan_id: int):
     kb = InlineKeyboardBuilder()
     kb.button(text="💳 پرداخت کارت به کارت", callback_data=f"pay:{plan_id}")
@@ -50,19 +66,22 @@ def admin_menu_kb():
 def admin_prods_kb(prods):
     kb = InlineKeyboardBuilder()
     for p in prods:
-        kb.button(text=f"🧩 {p['title']}  •  ❌ حذف", callback_data=f"admin:del_prod:{p['id']}")
-        kb.button(text=f"💠 پلن‌های «{p['title']}»", callback_data=f"admin:plans_for_prod:{p['id']}")
+        kb.button(text=f"🧩 {p['title']}", callback_data=f"admin:edit_prod:{p['id']}")
+        kb.button(text=f"❌ حذف", callback_data=f"admin:del_prod:{p['id']}")
+        kb.button(text=f"💠 پلن‌ها", callback_data=f"admin:plans_for_prod:{p['id']}")
     kb.button(text="➕ افزودن محصول", callback_data="admin:add_prod")
     kb.button(text="⬅️ بازگشت", callback_data="admin:menu")
-    kb.adjust(1,1,1,1)
+    kb.adjust(3,1,1)
     return kb.as_markup()
 
-def admin_plans_prod_kb(prods):
+def admin_plans_list_kb(plans, pid: int):
     kb = InlineKeyboardBuilder()
-    for p in prods:
-        kb.button(text=f"📦 {p['title']} ▶️ پلن‌ها", callback_data=f"admin:plans_for_prod:{p['id']}")
-    kb.button(text="⬅️ بازگشت", callback_data="admin:menu")
-    kb.adjust(1)
+    for pl in plans:
+        kb.button(text=f"✏️ ویرایش «{pl['title']}»", callback_data=f"admin:edit_plan:{pl['id']}")
+        kb.button(text=f"❌ حذف", callback_data=f"admin:del_plan:{pl['id']}")
+    kb.button(text="➕ افزودن پلن", callback_data=f"admin:add_plan:{pid}")
+    kb.button(text="⬅️ محصولات", callback_data="admin:prods")
+    kb.adjust(2,1,1)
     return kb.as_markup()
 
 def admin_orders_kb(orders):
