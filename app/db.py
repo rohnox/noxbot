@@ -10,7 +10,6 @@ async def init_db() -> None:
     _DB = await aiosqlite.connect(_DB_PATH)
     await _DB.execute("PRAGMA foreign_keys=ON;")
 
-    # users
     await _DB.execute("""CREATE TABLE IF NOT EXISTS users(
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         tg_id INTEGER UNIQUE,
@@ -19,13 +18,11 @@ async def init_db() -> None:
         is_admin INTEGER DEFAULT 0
     )""")
 
-    # products (NO categories)
     await _DB.execute("""CREATE TABLE IF NOT EXISTS products(
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         title TEXT NOT NULL
     )""")
 
-    # plans (with optional description)
     await _DB.execute("""CREATE TABLE IF NOT EXISTS plans(
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         product_id INTEGER NOT NULL,
@@ -35,7 +32,6 @@ async def init_db() -> None:
         FOREIGN KEY(product_id) REFERENCES products(id) ON DELETE CASCADE
     )""")
 
-    # orders (with tracking_code)
     await _DB.execute("""CREATE TABLE IF NOT EXISTS orders(
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         user_id INTEGER NOT NULL,
@@ -51,13 +47,12 @@ async def init_db() -> None:
         FOREIGN KEY(plan_id) REFERENCES plans(id)
     )""")
 
-    # settings
     await _DB.execute("""CREATE TABLE IF NOT EXISTS settings(
         key TEXT PRIMARY KEY,
         value TEXT
     )""")
 
-    # Safe ALTERs (idempotent)
+    # Idempotent alters (ignore errors if exist)
     try:
         await _DB.execute("ALTER TABLE plans ADD COLUMN description TEXT DEFAULT ''")
     except Exception:
@@ -105,7 +100,7 @@ async def upsert_user(tg_id: int, first_name: str, username: str, is_admin: int)
     await execute("""INSERT INTO users(tg_id, first_name, username, is_admin)
                      VALUES(?,?,?,?)
                      ON CONFLICT(tg_id) DO UPDATE SET first_name=excluded.first_name,
-                       username=excluded.username, is_admin=excluded.is_admin""",                      tg_id, first_name, username, is_admin)
+                       username=excluded.username, is_admin=excluded.is_admin""", tg_id, first_name, username, is_admin)
 
 async def get_or_create_user_id(tg_id: int) -> int:
     row = await fetchone("SELECT id FROM users WHERE tg_id=?", tg_id)

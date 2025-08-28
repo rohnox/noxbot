@@ -4,19 +4,20 @@ from aiogram.types import CallbackQuery, Message
 from aiogram.fsm.state import StatesGroup, State
 from aiogram.fsm.context import FSMContext
 
-from app.db import fetchall, fetchone, execute
+from app.db import fetchall, fetchone, execute, get_setting
 from app.keyboards import (
     admin_menu_kb,
     admin_prods_kb,
+    admin_plans_prod_kb,
+    admin_orders_kb,
     admin_order_actions_kb,
 )
-from app.services.orders import notify_order, notify_order_proof  # may be used elsewhere
-from app.config import settings
 
 router = Router()
 
 # ---------- Guards ----------
 async def guard_admin(cb: CallbackQuery) -> bool:
+    from app.config import settings
     admins = set(map(int, (settings.admins or "").split(","))) if isinstance(settings.admins, str) else set(settings.admins or [])
     ok = cb.from_user.id in admins
     if not ok:
@@ -34,6 +35,10 @@ class PlanStates(StatesGroup):
 
 class FindStates(StatesGroup):
     waiting_trk = State()
+
+class BroadcastStates(StatesGroup):
+    waiting_copy = State()
+    waiting_forward = State()
 
 # ---------- Admin Menu ----------
 @router.callback_query(F.data == "admin:menu")
@@ -79,7 +84,17 @@ async def admin_del_prod(cb: CallbackQuery):
     prods = await fetchall("SELECT id, title FROM products ORDER BY id DESC")
     await cb.message.edit_text("📦 مدیریت محصولات:", reply_markup=admin_prods_kb(prods))
 
-# ---------- Plans (linked to a product) ----------
+# ---------- Plans ----------
+@router.callback_query(F.data == "admin:plans")
+async def admin_plans(cb: CallbackQuery):
+    if not await guard_admin(cb):
+        return
+    prods = await fetchall("SELECT id, title FROM products ORDER BY id DESC")
+    if not prods:
+        await cb.message.edit_text("هنوز محصولی ندارید. از «📦 محصولات» یک محصول اضافه کنید.", reply_markup=admin_menu_kb())
+        return
+    await cb.message.edit_text("یک محصول را برای مدیریت پلن‌ها انتخاب کنید:", reply_markup=admin_plans_prod_kb(prods))
+
 @router.callback_query(F.data.startswith("admin:plans_for_prod:"))
 async def admin_plans_for_prod(cb: CallbackQuery, state: FSMContext):
     if not await guard_admin(cb):
@@ -87,7 +102,6 @@ async def admin_plans_for_prod(cb: CallbackQuery, state: FSMContext):
     pid = int(cb.data.split(":")[2])
     await state.update_data(prod_id=pid)
     plans = await fetchall("SELECT id, title, price FROM plans WHERE product_id=? ORDER BY price ASC", pid)
-    # Build a simple text list with add button in menu:
     txt = "💠 پلن‌های این محصول:\n" + ("(خالی)" if not plans else "\n".join([f"- {p['title']} | {p['price']:,} تومان" for p in plans]))
     await cb.message.edit_text(txt + "\n\nبرای افزودن پلن، عنوان را ارسال کنید.", reply_markup=admin_menu_kb())
     await state.set_state(PlanStates.adding_title)
@@ -112,6 +126,16 @@ async def admin_add_plan_price(m: Message, state: FSMContext):
     await state.set_state(PlanStates.adding_desc)
     await m.answer("توضیح پلن را ارسال کنید (اختیاری). برای خالی گذاشتن /skip بزنید.")
 
+@router.message(PlanStates.adding_desc, F.text.in_({'/skip','/SKIP'}))
+async def admin_add_plan_desc_skip(m: Message, state: FSMContext):
+    data = await state.get_data()
+    prod_id = data.get("prod_id")
+    title = data.get("plan_title")
+    price = data.get("plan_price")
+    await execute("INSERT INTO plans(product_id, title, price, description) VALUES(?,?,?,?)", prod_id, title, price, '')
+    await state.clear()
+    await m.answer("✅ پلن اضافه شد (بدون توضیح).", reply_markup=admin_menu_kb())
+
 @router.message(PlanStates.adding_desc, F.text)
 async def admin_add_plan_desc(m: Message, state: FSMContext):
     data = await state.get_data()
@@ -123,20 +147,31 @@ async def admin_add_plan_desc(m: Message, state: FSMContext):
     await state.clear()
     await m.answer("✅ پلن اضافه شد.", reply_markup=admin_menu_kb())
 
-@router.message(PlanStates.adding_desc, F.text.in_({'/skip','/SKIP'}))
-async def admin_add_plan_desc_skip(m: Message, state: FSMContext):
-    data = await state.get_data()
-    prod_id = data.get("prod_id")
-    title = data.get("plan_title")
-    price = data.get("plan_price")
-    await execute("INSERT INTO plans(product_id, title, price, description) VALUES(?,?,?,?)", prod_id, title, price, '')
-    await state.clear()
-    await m.answer("✅ پلن اضافه شد (بدون توضیح).", reply_markup=admin_menu_kb())
+# ---------- Orders ----------
+@router.callback_query(F.data == "admin:orders")
+async def admin_orders(cb: CallbackQuery):
+    if not await guard_admin(cb):
+        return
+    orders = await fetchall("SELECT id, status FROM orders ORDER BY id DESC LIMIT 20")
+    await cb.message.edit_text("🧾 ۲۰ سفارش اخیر:", reply_markup=admin_orders_kb(orders))
 
-# ---------- Orders: status actions (processing/complete/reject) ----------
-def _ensure_tracking_row(row, oid):
-    # Helper used only inside this file (synchronous wrapper for clarity in handlers)
-    return row
+@router.callback_query(F.data.startswith("admin:order_view:"))
+async def admin_order_view(cb: CallbackQuery):
+    if not await guard_admin(cb):
+        return
+    oid = int(cb.data.split(":")[2])
+    row = await fetchone("""SELECT o.id, o.status, o.tracking_code, p.title as plan_title, pr.title as product_title, p.price
+                             FROM orders o
+                             JOIN plans p ON p.id=o.plan_id
+                             JOIN products pr ON pr.id=o.product_id
+                             WHERE o.id=?""", oid)
+    if not row:
+        await cb.answer("سفارش یافت نشد.", show_alert=True)
+        return
+    txt = (f"سفارش #{row['id']}\nکد پیگیری: {row['tracking_code'] or '—'}\n"
+           f"محصول: {row['product_title']}\nپلن: {row['plan_title']}\n"
+           f"قیمت: {row['price']:,} تومان\nوضعیت: {row['status']}")
+    await cb.message.edit_text(txt, reply_markup=admin_order_actions_kb(row['id']))
 
 async def _gen_tracking():
     import random, string
@@ -195,7 +230,7 @@ async def admin_order_reject(cb: CallbackQuery):
             pass
     await cb.answer("❌ سفارش رد شد")
 
-# ---------- Admin: find by tracking code ----------
+# ---------- Find by tracking ----------
 @router.callback_query(F.data == "admin:find_by_trk")
 async def admin_find_by_trk_start(cb: CallbackQuery, state: FSMContext):
     if not await guard_admin(cb):
@@ -219,3 +254,44 @@ async def admin_find_by_trk_recv(m: Message, state: FSMContext):
            f"محصول: {row['product_title']}\nپلن: {row['plan_title']}\n"
            f"قیمت: {row['price']:,} تومان\nوضعیت: {row['status']}")
     await m.answer(txt, reply_markup=admin_order_actions_kb(row['id']))
+
+# ---------- Broadcast ----------
+@router.callback_query(F.data == "admin:broadcast_copy")
+async def admin_broadcast_copy(cb: CallbackQuery, state: FSMContext):
+    if not await guard_admin(cb):
+        return
+    await state.set_state(BroadcastStates.waiting_copy)
+    await cb.message.edit_text("پیامی که باید «کپی» شود را ارسال کنید.", reply_markup=admin_menu_kb())
+
+@router.message(BroadcastStates.waiting_copy)
+async def broadcast_copy_message(m: Message, state: FSMContext):
+    users = await fetchall("SELECT tg_id FROM users WHERE tg_id IS NOT NULL")
+    sent = 0
+    for u in users:
+        try:
+            await m.bot.copy_message(chat_id=u["tg_id"], from_chat_id=m.chat.id, message_id=m.message_id)
+            sent += 1
+        except Exception:
+            pass
+    await state.clear()
+    await m.answer(f"✅ ارسال کپی برای {sent} کاربر انجام شد.", reply_markup=admin_menu_kb())
+
+@router.callback_query(F.data == "admin:broadcast_forward")
+async def admin_broadcast_forward(cb: CallbackQuery, state: FSMContext):
+    if not await guard_admin(cb):
+        return
+    await state.set_state(BroadcastStates.waiting_forward)
+    await cb.message.edit_text("پیامی که باید «فوروارد» شود را ارسال کنید.", reply_markup=admin_menu_kb())
+
+@router.message(BroadcastStates.waiting_forward)
+async def broadcast_forward_message(m: Message, state: FSMContext):
+    users = await fetchall("SELECT tg_id FROM users WHERE tg_id IS NOT NULL")
+    sent = 0
+    for u in users:
+        try:
+            await m.bot.forward_message(chat_id=u["tg_id"], from_chat_id=m.chat.id, message_id=m.message_id)
+            sent += 1
+        except Exception:
+            pass
+    await state.clear()
+    await m.answer(f"✅ فوروارد برای {sent} کاربر انجام شد.", reply_markup=admin_menu_kb())
