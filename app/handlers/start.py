@@ -14,27 +14,46 @@ from app.keyboards import (
 
 router = Router()
 
+from app.db import get_setting, upsert_user, fetchall, fetchone
+from app.keyboards import main_menu, back_home_kb, shop_products_kb, shop_plans_kb, pay_kb
+
 # /start
 @router.message(F.text == "/start")
 async def start_cmd(m: Message):
-    # ثبت/به‌روزرسانی کاربر
     await upsert_user(m.from_user.id, m.from_user.first_name or "", m.from_user.username or "", 0)
-    # نمایش منوی اصلی با تشخیص ادمین
+
     from app.config import settings
     admins = set(map(int, (settings.admins or "").split(","))) if isinstance(settings.admins, str) else set(settings.admins or [])
     is_admin = m.from_user.id in admins
-    await m.answer("خوش آمدید 👋", reply_markup=main_menu(is_admin))
 
-# بازگشت به خانه
+    # ساخت URL ها
+    main_ch = await get_setting("MAIN_CHANNEL", None)
+    sup = await get_setting("SUPPORT_USERNAME", None)
+    if sup and not sup.startswith("@"):
+        sup = "@" + sup
+    support_url = f"https://t.me/{sup[1:]}" if sup else None
+    channel_url = main_ch if (main_ch and main_ch.startswith("http")) else (f"https://t.me/{main_ch[1:]}" if (main_ch and main_ch.startswith("@")) else main_ch)
+
+    await m.answer("خوش آمدید 👋", reply_markup=main_menu(is_admin, channel_url, support_url))
+
 @router.callback_query(F.data == "home")
 async def go_home(cb: CallbackQuery):
     from app.config import settings
     admins = set(map(int, (settings.admins or "").split(","))) if isinstance(settings.admins, str) else set(settings.admins or [])
     is_admin = cb.from_user.id in admins
+
+    main_ch = await get_setting("MAIN_CHANNEL", None)
+    sup = await get_setting("SUPPORT_USERNAME", None)
+    if sup and not sup.startswith("@"):
+        sup = "@" + sup
+    support_url = f"https://t.me/{sup[1:]}" if sup else None
+    channel_url = main_ch if (main_ch and main_ch.startswith("http")) else (f"https://t.me/{main_ch[1:]}" if (main_ch and main_ch.startswith("@")) else main_ch)
+
     try:
-        await cb.message.edit_text("منوی اصلی:", reply_markup=main_menu(is_admin))
+        await cb.message.edit_text("منوی اصلی:", reply_markup=main_menu(is_admin, channel_url, support_url))
     except TelegramBadRequest:
-        await cb.message.answer("منوی اصلی:", reply_markup=main_menu(is_admin))
+        await cb.message.answer("منوی اصلی:", reply_markup=main_menu(is_admin, channel_url, support_url))
+
 
 # ===== فروشگاه =====
 @router.callback_query(F.data == "shop")
