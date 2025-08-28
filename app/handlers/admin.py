@@ -8,9 +8,14 @@ from app import texts
 from app.config import is_admin
 from app.db import fetchall, fetchone, execute, set_setting
 from app.keyboards import (
-    admin_menu_kb, admin_cats_kb, admin_prods_cats_kb, admin_prods_kb,
-    admin_plans_prod_kb, admin_plans_kb, admin_settings_kb,
-    admin_orders_kb, admin_order_actions_kb, main_menu
+    admin_menu_kb,
+    admin_prods_kb,
+    admin_plans_prod_kb,
+    admin_plans_kb,
+    admin_settings_kb,
+    admin_orders_kb,
+    admin_order_actions_kb,
+    main_menu
 )
 
 router = Router()
