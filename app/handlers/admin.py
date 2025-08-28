@@ -338,10 +338,10 @@ async def admin_order_view(cb: CallbackQuery):
     row = await fetchone(
         """SELECT o.id, o.status, o.tracking_code,
                   p.title as plan_title, pr.title as product_title, p.price,
-                  u.tg_id as user_tg
+                  u.tg_id as user_tg, u.username as user_un
            FROM orders o
            JOIN plans p ON p.id=o.plan_id
-           JOIN products pr ON pr.id=p.product_id
+           JOIN products pr ON pr.id=o.product_id
            JOIN users u ON u.id=o.user_id
            WHERE o.id=?""",
         oid
@@ -349,13 +349,18 @@ async def admin_order_view(cb: CallbackQuery):
     if not row:
         await cb.answer("سفارش یافت نشد.", show_alert=True)
         return
+
     txt = f"""سفارش #{row['id']}
 کد پیگیری: {row['tracking_code'] or '—'}
+کاربر: @{row['user_un'] or '-'}
+آیدی عددی: {row['user_tg']}
 محصول: {row['product_title']}
 پلن: {row['plan_title']}
 قیمت: {row['price']:,} تومان
 وضعیت: {row['status']}"""
+
     await _safe_edit(cb.message, txt, reply_markup=admin_order_actions_kb(row['id']))
+
 
 async def _gen_tracking():
     import random, string
