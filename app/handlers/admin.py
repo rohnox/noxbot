@@ -13,11 +13,8 @@ from app.keyboards import (
 
 router = Router()
 
-# ======================
-#        GUARDS
-# ======================
+# ===== Guards =====
 async def guard_admin(cb: CallbackQuery) -> bool:
-    """Allow only configured admins."""
     from app.config import settings
     admins = set(map(int, (settings.admins or "").split(","))) if isinstance(settings.admins, str) else set(settings.admins or [])
     ok = cb.from_user.id in admins
@@ -25,9 +22,7 @@ async def guard_admin(cb: CallbackQuery) -> bool:
         await cb.answer("مجوز دسترسی ندارید.", show_alert=True)
     return ok
 
-# ======================
-#        STATES
-# ======================
+# ===== States =====
 class ProdStates(StatesGroup):
     adding_title = State()
     editing_title = State()
@@ -56,11 +51,8 @@ class EffectStates(StatesGroup):
     waiting = State()
     key = State()
 
-# ======================
-#       HELPERS
-# ======================
+# ===== Helpers =====
 async def _safe_edit(message, text, reply_markup=None):
-    """Edit text safely; fallback to answer if 'message is not modified'."""
     try:
         await message.edit_text(text, reply_markup=reply_markup)
     except TelegramBadRequest:
@@ -86,14 +78,12 @@ def _label_for(key: str) -> str:
     }.get(key, key)
 
 def _val(row, key, default=None):
-    """Safe getter برای sqlite3.Row یا dict."""
     try:
         return row[key]
     except Exception:
         return default
 
 async def _send_with_effect(bot, chat_id: int, text: str, effect_key: str):
-    """Send message with message_effect_id if configured; fallback to normal."""
     eff = await get_setting(effect_key, None)
     try:
         if eff:
@@ -109,22 +99,16 @@ async def _gen_tracking():
     import random, string
     return ''.join(random.choices(string.ascii_uppercase + string.digits, k=8))
 
-# ======================
-#      ADMIN MENU
-# ======================
+# ===== Admin Menu =====
 @router.callback_query(F.data == "admin:menu")
 async def admin_menu(cb: CallbackQuery, state: FSMContext):
-    if not await guard_admin(cb):
-        return
     try:
         await state.clear()
     except Exception:
         pass
     await _safe_edit(cb.message, "پنل مدیریت:", reply_markup=admin_menu_kb())
 
-# ======================
-#       SETTINGS
-# ======================
+# ===== Settings =====
 @router.callback_query(F.data == "admin:settings")
 async def admin_settings(cb: CallbackQuery):
     if not await guard_admin(cb):
@@ -163,7 +147,7 @@ async def admin_settings_save(m: Message, state: FSMContext):
     label = data.get("edit_label") or key
     val = (m.text or "").strip()
     if not val:
-        await m.answer("❌ مقدار نامعتبر است. دوباره ارسال کنید.")
+        await m.answer("❌ مقدار نامعتبر است.")
         return
     if key == "SUPPORT_USERNAME" and not val.startswith("@"):
         val = "@" + val
@@ -171,9 +155,7 @@ async def admin_settings_save(m: Message, state: FSMContext):
     await state.clear()
     await m.answer(f"✅ «{label}» ذخیره شد.", reply_markup=admin_settings_kb())
 
-# ======================
-#       EFFECTS
-# ======================
+# ===== Effects =====
 @router.callback_query(F.data == "admin:effects")
 async def admin_effects(cb: CallbackQuery):
     if not await guard_admin(cb):
@@ -210,9 +192,7 @@ async def admin_set_effect_save(m: Message, state: FSMContext):
     await state.clear()
     await m.answer("✅ افکت ذخیره شد.", reply_markup=admin_effects_kb())
 
-# ======================
-#       PRODUCTS
-# ======================
+# ===== Products =====
 @router.callback_query(F.data == "admin:prods")
 async def admin_prods(cb: CallbackQuery):
     if not await guard_admin(cb):
@@ -289,9 +269,7 @@ async def admin_del_prod(cb: CallbackQuery):
     prods = await fetchall("SELECT id, title FROM products ORDER BY id DESC")
     await _safe_edit(cb.message, "📦 مدیریت محصولات:", reply_markup=admin_prods_kb(prods))
 
-# ======================
-#         PLANS
-# ======================
+# ===== Plans =====
 @router.callback_query(F.data == "admin:plans")
 async def admin_plans(cb: CallbackQuery):
     if not await guard_admin(cb):
@@ -387,7 +365,7 @@ async def plan_edit_price(m: Message, state: FSMContext):
     await execute("UPDATE plans SET price=? WHERE id=?", price, plid)
     await state.clear()
     row = await fetchone("SELECT product_id FROM plans WHERE id=?", plid)
-    pid = int(_val(row, "product_id", 0))
+    pid = int(row["product_id"]) if row else 0
     plans = await fetchall("SELECT id, title, price FROM plans WHERE product_id=? ORDER BY price ASC", pid)
     await m.answer("✅ قیمت پلن به‌روزرسانی شد.", reply_markup=admin_plans_list_kb(plans, pid))
 
@@ -397,15 +375,13 @@ async def admin_del_plan(cb: CallbackQuery):
         return
     plid = int(cb.data.split(":")[2])
     row = await fetchone("SELECT product_id FROM plans WHERE id=?", plid)
-    pid = int(_val(row, "product_id", 0))
+    pid = int(row["product_id"]) if row else 0
     await execute("DELETE FROM plans WHERE id=?", plid)
     plans = await fetchall("SELECT id, title, price FROM plans WHERE product_id=? ORDER BY price ASC", pid)
     txt = "💠 پلن‌های این محصول:\n" + ("(خالی)" if not plans else "\n".join([f"- {p['title']} | {p['price']:,} تومان" for p in plans]))
     await _safe_edit(cb.message, txt, reply_markup=admin_plans_list_kb(plans, pid))
 
-# ======================
-#         ORDERS
-# ======================
+# ===== Orders =====
 @router.callback_query(F.data == "admin:orders")
 async def admin_orders(cb: CallbackQuery):
     if not await guard_admin(cb):
@@ -450,11 +426,11 @@ async def admin_order_processing(cb: CallbackQuery):
     oid = int(cb.data.split(":")[2])
     await execute("UPDATE orders SET status='processing' WHERE id=?", oid)
     row = await fetchone("SELECT tracking_code, u.tg_id FROM orders o JOIN users u ON u.id=o.user_id WHERE o.id=?", oid)
-    trk = _val(row, "tracking_code") or await _gen_tracking()
-    if not _val(row, "tracking_code"):
+    trk = row["tracking_code"] or await _gen_tracking()
+    if not row["tracking_code"]:
         await execute("UPDATE orders SET tracking_code=? WHERE id=?", trk, oid)
-    if row and _val(row, "tg_id"):
-        await _send_with_effect(cb.bot, _val(row, "tg_id"), f"🔧 سفارش شما با کد پیگیری {trk} در حال انجام است.", "EFFECT_CREATED")
+    if row and row["tg_id"]:
+        await _send_with_effect(cb.bot, row["tg_id"], f"🔧 سفارش شما با کد پیگیری {trk} در حال انجام است.", "EFFECT_CREATED")
     await cb.answer("🔧 وضعیت تغییر کرد")
 
 @router.callback_query(F.data.startswith("admin:order_complete:"))
@@ -464,11 +440,11 @@ async def admin_order_complete(cb: CallbackQuery):
     oid = int(cb.data.split(":")[2])
     await execute("UPDATE orders SET status='completed' WHERE id=?", oid)
     row = await fetchone("SELECT tracking_code, u.tg_id FROM orders o JOIN users u ON u.id=o.user_id WHERE o.id=?", oid)
-    trk = _val(row, "tracking_code") or await _gen_tracking()
-    if not _val(row, "tracking_code"):
+    trk = row["tracking_code"] or await _gen_tracking()
+    if not row["tracking_code"]:
         await execute("UPDATE orders SET tracking_code=? WHERE id=?", trk, oid)
-    if row and _val(row, "tg_id"):
-        await _send_with_effect(cb.bot, _val(row, "tg_id"), f"🎉 سفارش شما با کد پیگیری {trk} انجام شد.", "EFFECT_COMPLETED")
+    if row and row["tg_id"]:
+        await _send_with_effect(cb.bot, row["tg_id"], f"🎉 سفارش شما با کد پیگیری {trk} انجام شد.", "EFFECT_COMPLETED")
     await cb.answer("✅ اتمام کار ثبت شد")
 
 @router.callback_query(F.data.startswith("admin:order_reject:"))
@@ -478,16 +454,14 @@ async def admin_order_reject(cb: CallbackQuery):
     oid = int(cb.data.split(":")[2])
     await execute("UPDATE orders SET status='rejected' WHERE id=?", oid)
     row = await fetchone("SELECT tracking_code, u.tg_id FROM orders o JOIN users u ON u.id=o.user_id WHERE o.id=?", oid)
-    trk = _val(row, "tracking_code") or await _gen_tracking()
-    if not _val(row, "tracking_code"):
+    trk = row["tracking_code"] or await _gen_tracking()
+    if not row["tracking_code"]:
         await execute("UPDATE orders SET tracking_code=? WHERE id=?", trk, oid)
-    if row and _val(row, "tg_id"):
-        await _send_with_effect(cb.bot, _val(row, "tg_id"), f"❌ سفارش شما با کد پیگیری {trk} رد شد. لطفاً با پشتیبانی در ارتباط باشید.", "EFFECT_REJECTED")
+    if row and row["tg_id"]:
+        await _send_with_effect(cb.bot, row["tg_id"], f"❌ سفارش شما با کد پیگیری {trk} رد شد.", "EFFECT_REJECTED")
     await cb.answer("❌ سفارش رد شد")
 
-# ======================
-#   FIND BY TRACKING
-# ======================
+# ===== Find by tracking =====
 @router.callback_query(F.data == "admin:find_by_trk")
 async def admin_find_by_trk_start(cb: CallbackQuery, state: FSMContext):
     if not await guard_admin(cb):
@@ -520,9 +494,7 @@ async def admin_find_by_trk_recv(m: Message, state: FSMContext):
 وضعیت: {row['status']}"""
     await m.answer(txt, reply_markup=admin_order_actions_kb(row['id']))
 
-# ======================
-#       BROADCAST
-# ======================
+# ===== Broadcast =====
 @router.callback_query(F.data == "admin:broadcast_copy")
 async def admin_broadcast_copy(cb: CallbackQuery, state: FSMContext):
     if not await guard_admin(cb):

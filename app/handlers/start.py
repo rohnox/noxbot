@@ -27,7 +27,6 @@ def _build_urls(main_ch: str | None, sup: str | None):
         support_url = f"https://t.me/{s[1:]}"
     return channel_url, support_url
 
-# /start
 @router.message(CommandStart())
 async def start_cmd(m: Message):
     await upsert_user(m.from_user.id, m.from_user.first_name or "", m.from_user.username or "", 0)
@@ -42,6 +41,11 @@ async def start_cmd(m: Message):
 
     welcome = await get_setting("WELCOME_TEXT", "خوش آمدید 👋")
     await m.answer(welcome, reply_markup=main_menu(is_admin, ch_url, sup_url))
+
+# بکاپ برای هر نوع /start متنی
+@router.message(F.text.startswith("/start"))
+async def start_cmd_text_fallback(m: Message):
+    return await start_cmd(m)
 
 @router.callback_query(F.data == "home")
 async def go_home(cb: CallbackQuery):
@@ -155,8 +159,8 @@ async def orders_me(cb: CallbackQuery):
     else:
         lines = []
         for o in orders:
-            ct = o.get("created_at") if isinstance(o, dict) else o[3]
-            lines.append(f"#{o['id']} | {o['status']} | {o['tracking_code'] or '—'} | {ct or '-'} | {o['product_title']} - {o['plan_title']}")
+            ct = (o["created_at"] if isinstance(o, dict) else o[3]) or "-"
+            lines.append(f"#{o['id']} | {o['status']} | {o['tracking_code'] or '—'} | {ct} | {o['product_title']} - {o['plan_title']}")
         msg = "🧾 سفارش‌های اخیر شما:\n" + "\n".join(lines)
     try:
         await cb.message.edit_text(msg, reply_markup=back_home_kb())

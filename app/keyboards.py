@@ -12,7 +12,6 @@ def main_menu(
     kb.button(text="📦 سفارشات من", callback_data="orders_me")
     kb.button(text="👤 حساب کاربری", callback_data="account")
 
-    # فقط وقتی لینک‌ها تنظیم شده باشند نشان بده
     if channel_url:
         kb.button(text="📣 کانال ما", url=channel_url)
     if support_url:
@@ -21,11 +20,10 @@ def main_menu(
     if is_admin:
         kb.button(text="🛠️ پنل مدیریت", callback_data="admin:menu")
 
-    # ردیف‌بندی
     if channel_url or support_url:
-        kb.adjust(2, 2, 1, 1)  # با لینک‌ها
+        kb.adjust(2, 2, 1, 1)
     else:
-        kb.adjust(2, 1, 1)     # بدون لینک‌ها
+        kb.adjust(2, 1, 1)
     return kb.as_markup()
 
 def back_home_kb():

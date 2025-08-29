@@ -3,7 +3,6 @@ from aiogram import Router, F
 from aiogram.types import CallbackQuery, Message
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import StatesGroup, State
-
 from datetime import datetime
 
 from app.db import fetchone, fetchall, execute, get_setting
@@ -13,6 +12,12 @@ router = Router()
 
 class ProofStates(StatesGroup):
     waiting = State()
+
+def _val(row, key, default=None):
+    try:
+        return row[key]
+    except Exception:
+        return default
 
 def _gen_tracking():
     import random, string
@@ -29,7 +34,6 @@ async def _get_or_create_user_id(tg_user) -> int:
     return uid
 
 def _normalize_chat_id(chat: str | None):
-    """@username -> '@username' (str), link -> '@username', -100.. -> int"""
     if not chat:
         return None
     s = chat.strip()
@@ -43,46 +47,32 @@ def _normalize_chat_id(chat: str | None):
     return s
 
 async def _send_with_effect(bot, chat_id: int, text: str, effect_key: str):
-    """Try message_effect_id; fallback to normal send if it fails."""
     eff = await get_setting(effect_key, None)
     try:
         if eff:
             return await bot.send_message(chat_id, text, message_effect_id=eff)
         return await bot.send_message(chat_id, text)
     except Exception:
-        # fallback بدون افکت
         try:
             return await bot.send_message(chat_id, text)
         except Exception:
             return None
 
 async def _ensure_order_columns():
-    """اگر ستون‌های لازم وجود نداشتند اضافه شود (created_at/proof*/tracking_code)."""
     cols = await fetchall("PRAGMA table_info(orders)")
-    if isinstance(cols, list):
-        names = { (c["name"] if isinstance(c, dict) else c[1]) for c in cols }
-    else:
-        names = set()
+    names = { (c["name"] if isinstance(c, dict) else c[1]) for c in cols } if cols else set()
     if "created_at" not in names:
-        try:
-            await execute("ALTER TABLE orders ADD COLUMN created_at TEXT")
-        except Exception:
-            pass
+        try: await execute("ALTER TABLE orders ADD COLUMN created_at TEXT")
+        except Exception: pass
     if "proof_type" not in names:
-        try:
-            await execute("ALTER TABLE orders ADD COLUMN proof_type TEXT")
-        except Exception:
-            pass
+        try: await execute("ALTER TABLE orders ADD COLUMN proof_type TEXT")
+        except Exception: pass
     if "proof_value" not in names:
-        try:
-            await execute("ALTER TABLE orders ADD COLUMN proof_value TEXT")
-        except Exception:
-            pass
+        try: await execute("ALTER TABLE orders ADD COLUMN proof_value TEXT")
+        except Exception: pass
     if "tracking_code" not in names:
-        try:
-            await execute("ALTER TABLE orders ADD COLUMN tracking_code TEXT")
-        except Exception:
-            pass
+        try: await execute("ALTER TABLE orders ADD COLUMN tracking_code TEXT")
+        except Exception: pass
 
 async def _notify_new_order(bot, order_id: int):
     row = await fetchone(
@@ -104,7 +94,7 @@ async def _notify_new_order(bot, order_id: int):
 
     txt = f"""📥 سفارش جدید #{row['id']}
 #️⃣ کد پیگیری: {row['tracking_code']}
-🕒 زمان ثبت: {row.get('created_at') or '-'}
+🕒 زمان ثبت: {_val(row, 'created_at') or '-'}
 👤 کاربر: <a href='tg://user?id={row['tg_id']}'>{row['first_name'] or 'کاربر'}</a>
 🔖 یوزرنیم: @{row['username'] or '-'}
 🆔 آیدی عددی: {row['tg_id']}
@@ -119,7 +109,6 @@ async def _notify_new_order(bot, order_id: int):
         except Exception:
             ok = False
 
-    # نوتیف خصوصی برای ادمین‌ها
     try:
         from app.config import settings
         admins = set(map(int, (settings.admins or "").split(","))) if isinstance(settings.admins, str) else set(settings.admins or [])
@@ -133,7 +122,7 @@ async def _notify_new_order(bot, order_id: int):
 
     return ok
 
-@router.callback_query(F.data.regexp(r"^pay:(\d+)$"))
+@router.callback_query(F.data.startswith("pay:"))
 async def pay_cb(c: CallbackQuery, state: FSMContext):
     plan_id = int(c.data.split(":")[1])
     plan = await fetchone(
@@ -157,10 +146,8 @@ async def pay_cb(c: CallbackQuery, state: FSMContext):
         user_id, plan["product_id"], plan_id, "awaiting_proof", trk, created_at
     )
 
-    # اعلان به کانال و ادمین‌ها
     await _notify_new_order(c.bot, order_id)
 
-    # پیام راهنما + دکمه ارسال رسید (بدون افکت)
     card = await get_setting("card_number", "") or "—"
     guide = f"""🔖 کد پیگیری: <b>{trk}</b>
 
@@ -169,14 +156,9 @@ async def pay_cb(c: CallbackQuery, state: FSMContext):
 شماره کارت: {card}"""
     await c.message.edit_text(guide, reply_markup=proof_kb(order_id), parse_mode="HTML")
 
-    # پیام جدا با افکت «ثبت سفارش»
     await _send_with_effect(c.bot, c.message.chat.id, f"❤️ سفارش شما ثبت شد. کد پیگیری {trk}", "EFFECT_CREATED")
 
-# === Proof (رسید پرداخت) ===
-class ProofStates(StatesGroup):
-    waiting = State()
-
-@router.callback_query(F.data.regexp(r"^proof:(\d+)$"))
+@router.callback_query(F.data.startswith("proof:"))
 async def proof_start(c: CallbackQuery, state: FSMContext):
     order_id = int(c.data.split(":")[1])
     await state.update_data(order_id=order_id)
@@ -229,7 +211,7 @@ async def _send_proof_to_channel(m: Message, order_id: int, kind: str, file_id: 
         return
     caption = f"""🧾 رسید پرداخت برای سفارش #{row['id']}
 #️⃣ کد پیگیری: {row['tracking_code']}
-🕒 زمان ثبت: {row.get('created_at') or '-'}
+🕒 زمان ثبت: {_val(row, 'created_at') or '-'}
 👤 کاربر: <a href='tg://user?id={row['tg_id']}'>{row['first_name'] or 'کاربر'}</a>
 🔖 یوزرنیم: @{row['username'] or '-'}
 🆔 آیدی عددی: {row['tg_id']}
