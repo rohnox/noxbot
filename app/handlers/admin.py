@@ -17,7 +17,7 @@ router = Router()
 #        GUARDS
 # ======================
 async def guard_admin(cb: CallbackQuery) -> bool:
-    """Only allow configured admins."""
+    """Allow only configured admins."""
     from app.config import settings
     admins = set(map(int, (settings.admins or "").split(","))) if isinstance(settings.admins, str) else set(settings.admins or [])
     ok = cb.from_user.id in admins
@@ -60,6 +60,7 @@ class EffectStates(StatesGroup):
 #       HELPERS
 # ======================
 async def _safe_edit(message, text, reply_markup=None):
+    """Edit text safely; fallback to answer if 'message is not modified'."""
     try:
         await message.edit_text(text, reply_markup=reply_markup)
     except TelegramBadRequest:
@@ -84,6 +85,13 @@ def _label_for(key: str) -> str:
         "EFFECT_REJECTED": "افکت رد سفارش",
     }.get(key, key)
 
+def _val(row, key, default=None):
+    """Safe getter برای sqlite3.Row یا dict."""
+    try:
+        return row[key]
+    except Exception:
+        return default
+
 async def _send_with_effect(bot, chat_id: int, text: str, effect_key: str):
     """Send message with message_effect_id if configured; fallback to normal."""
     eff = await get_setting(effect_key, None)
@@ -106,6 +114,8 @@ async def _gen_tracking():
 # ======================
 @router.callback_query(F.data == "admin:menu")
 async def admin_menu(cb: CallbackQuery, state: FSMContext):
+    if not await guard_admin(cb):
+        return
     try:
         await state.clear()
     except Exception:
@@ -162,7 +172,7 @@ async def admin_settings_save(m: Message, state: FSMContext):
     await m.answer(f"✅ «{label}» ذخیره شد.", reply_markup=admin_settings_kb())
 
 # ======================
-#        EFFECTS
+#       EFFECTS
 # ======================
 @router.callback_query(F.data == "admin:effects")
 async def admin_effects(cb: CallbackQuery):
@@ -377,7 +387,7 @@ async def plan_edit_price(m: Message, state: FSMContext):
     await execute("UPDATE plans SET price=? WHERE id=?", price, plid)
     await state.clear()
     row = await fetchone("SELECT product_id FROM plans WHERE id=?", plid)
-    pid = int(row["product_id"]) if row else 0
+    pid = int(_val(row, "product_id", 0))
     plans = await fetchall("SELECT id, title, price FROM plans WHERE product_id=? ORDER BY price ASC", pid)
     await m.answer("✅ قیمت پلن به‌روزرسانی شد.", reply_markup=admin_plans_list_kb(plans, pid))
 
@@ -387,7 +397,7 @@ async def admin_del_plan(cb: CallbackQuery):
         return
     plid = int(cb.data.split(":")[2])
     row = await fetchone("SELECT product_id FROM plans WHERE id=?", plid)
-    pid = int(row["product_id"]) if row else 0
+    pid = int(_val(row, "product_id", 0))
     await execute("DELETE FROM plans WHERE id=?", plid)
     plans = await fetchall("SELECT id, title, price FROM plans WHERE product_id=? ORDER BY price ASC", pid)
     txt = "💠 پلن‌های این محصول:\n" + ("(خالی)" if not plans else "\n".join([f"- {p['title']} | {p['price']:,} تومان" for p in plans]))
@@ -424,7 +434,7 @@ async def admin_order_view(cb: CallbackQuery):
         return
     txt = f"""سفارش #{row['id']}
 کد پیگیری: {row['tracking_code'] or '—'}
-🕒 زمان ثبت: {row.get('created_at') or '-'}
+🕒 زمان ثبت: {_val(row, 'created_at') or '-'}
 کاربر: @{row['user_un'] or '-'}
 آیدی عددی: {row['user_tg']}
 محصول: {row['product_title']}
@@ -440,12 +450,12 @@ async def admin_order_processing(cb: CallbackQuery):
     oid = int(cb.data.split(":")[2])
     await execute("UPDATE orders SET status='processing' WHERE id=?", oid)
     row = await fetchone("SELECT tracking_code, u.tg_id FROM orders o JOIN users u ON u.id=o.user_id WHERE o.id=?", oid)
-    trk = row["tracking_code"] or await _gen_tracking()
-    if not row["tracking_code"]:
+    trk = _val(row, "tracking_code") or await _gen_tracking()
+    if not _val(row, "tracking_code"):
         await execute("UPDATE orders SET tracking_code=? WHERE id=?", trk, oid)
-    if row and row["tg_id"]:
-        await _send_with_effect(cb.bot, row["tg_id"], f"🔧 سفارش شما با کد پیگیری {trk} در حال انجام است.", "EFFECT_CREATED")
-    await cb.answer("🔧 به حالت در حال انجام تغییر کرد")
+    if row and _val(row, "tg_id"):
+        await _send_with_effect(cb.bot, _val(row, "tg_id"), f"🔧 سفارش شما با کد پیگیری {trk} در حال انجام است.", "EFFECT_CREATED")
+    await cb.answer("🔧 وضعیت تغییر کرد")
 
 @router.callback_query(F.data.startswith("admin:order_complete:"))
 async def admin_order_complete(cb: CallbackQuery):
@@ -454,11 +464,11 @@ async def admin_order_complete(cb: CallbackQuery):
     oid = int(cb.data.split(":")[2])
     await execute("UPDATE orders SET status='completed' WHERE id=?", oid)
     row = await fetchone("SELECT tracking_code, u.tg_id FROM orders o JOIN users u ON u.id=o.user_id WHERE o.id=?", oid)
-    trk = row["tracking_code"] or await _gen_tracking()
-    if not row["tracking_code"]:
+    trk = _val(row, "tracking_code") or await _gen_tracking()
+    if not _val(row, "tracking_code"):
         await execute("UPDATE orders SET tracking_code=? WHERE id=?", trk, oid)
-    if row and row["tg_id"]:
-        await _send_with_effect(cb.bot, row["tg_id"], f"🎉 سفارش شما با کد پیگیری {trk} انجام شد.", "EFFECT_COMPLETED")
+    if row and _val(row, "tg_id"):
+        await _send_with_effect(cb.bot, _val(row, "tg_id"), f"🎉 سفارش شما با کد پیگیری {trk} انجام شد.", "EFFECT_COMPLETED")
     await cb.answer("✅ اتمام کار ثبت شد")
 
 @router.callback_query(F.data.startswith("admin:order_reject:"))
@@ -468,11 +478,11 @@ async def admin_order_reject(cb: CallbackQuery):
     oid = int(cb.data.split(":")[2])
     await execute("UPDATE orders SET status='rejected' WHERE id=?", oid)
     row = await fetchone("SELECT tracking_code, u.tg_id FROM orders o JOIN users u ON u.id=o.user_id WHERE o.id=?", oid)
-    trk = row["tracking_code"] or await _gen_tracking()
-    if not row["tracking_code"]:
+    trk = _val(row, "tracking_code") or await _gen_tracking()
+    if not _val(row, "tracking_code"):
         await execute("UPDATE orders SET tracking_code=? WHERE id=?", trk, oid)
-    if row and row["tg_id"]:
-        await _send_with_effect(cb.bot, row["tg_id"], f"❌ سفارش شما با کد پیگیری {trk} رد شد. لطفاً با پشتیبانی در ارتباط باشید.", "EFFECT_REJECTED")
+    if row and _val(row, "tg_id"):
+        await _send_with_effect(cb.bot, _val(row, "tg_id"), f"❌ سفارش شما با کد پیگیری {trk} رد شد. لطفاً با پشتیبانی در ارتباط باشید.", "EFFECT_REJECTED")
     await cb.answer("❌ سفارش رد شد")
 
 # ======================
@@ -503,7 +513,7 @@ async def admin_find_by_trk_recv(m: Message, state: FSMContext):
         return
     txt = f"""سفارش #{row['id']}
 کد پیگیری: {row['tracking_code']}
-🕒 زمان ثبت: {row.get('created_at') or '-'}
+🕒 زمان ثبت: {_val(row, 'created_at') or '-'}
 محصول: {row['product_title']}
 پلن: {row['plan_title']}
 قیمت: {row['price']:,} تومان
