@@ -379,12 +379,10 @@ async def admin_order_processing(cb: CallbackQuery):
         await execute("UPDATE orders SET tracking_code=? WHERE id=?", trk, oid)
     if row and row["tg_id"]:
         try:
-            await cb.bot.send_message(row["tg_id"], "🔧")
             await cb.bot.send_message(row["tg_id"], f"🔧 سفارش شما با کد پیگیری {trk} در حال انجام است.")
         except Exception:
             pass
-    await cb.answer("🔧 به حالت در حال انجام تغییر کرد")
-
+    await cb.answer("🔧 وضعیت «در حال انجام» ثبت شد")
 @router.callback_query(F.data.startswith("admin:order_complete:"))
 async def admin_order_complete(cb: CallbackQuery):
     if not await guard_admin(cb):
@@ -397,22 +395,8 @@ async def admin_order_complete(cb: CallbackQuery):
         await execute("UPDATE orders SET tracking_code=? WHERE id=?", trk, oid)
     if row and row["tg_id"]:
         try:
-            try:
-            msg_done_banner = await cb.bot.send_message(row["tg_id"], "🎉")
-            msg_done = try:
-            msg_done = await cb.bot.send_message(row["tg_id"], f"🎉 سفارش شما با کد پیگیری {trk} انجام شد.")
-            try:
-                await react_emoji(cb.bot, msg_done.chat.id, msg_done.message_id, "🎉", big=True)
-            except Exception:
-                pass
-        except Exception:
-            pass
-            try:
-                await react_emoji(cb.bot, msg_done.chat.id, msg_done.message_id, "🎉", big=True)
-            except Exception:
-                pass
-        except Exception:
-            pass
+            await cb.bot.send_message(row["tg_id"], "🎉")
+            await cb.bot.send_message(row["tg_id"], f"🎉 سفارش شما با کد پیگیری {trk} انجام شد.")
         except Exception:
             pass
     await cb.answer("✅ اتمام کار ثبت شد")
@@ -429,7 +413,6 @@ async def admin_order_reject(cb: CallbackQuery):
         await execute("UPDATE orders SET tracking_code=? WHERE id=?", trk, oid)
     if row and row["tg_id"]:
         try:
-            try:
             msg_rej = await cb.bot.send_message(row["tg_id"], f"❌ سفارش شما با کد پیگیری {trk} رد شد. لطفاً با پشتیبانی در ارتباط باشید.")
             try:
                 await react_emoji(cb.bot, msg_rej.chat.id, msg_rej.message_id, "👎", big=True)
@@ -437,11 +420,7 @@ async def admin_order_reject(cb: CallbackQuery):
                 pass
         except Exception:
             pass
-        except Exception:
-            pass
     await cb.answer("❌ سفارش رد شد")
-
-# ---------- Find by tracking ----------
 @router.callback_query(F.data == "admin:find_by_trk")
 async def admin_find_by_trk_start(cb: CallbackQuery, state: FSMContext):
     if not await guard_admin(cb):
