@@ -23,8 +23,8 @@ async def start_cmd(m: Message):
     await upsert_user(m.from_user.id, m.from_user.first_name or "", m.from_user.username or "", 0)
 
     from app.config import settings
-    admins = set(map(int, (settings.admins or "").split(","))) if isinstance(settings.admins, str) else set(settings.admins or [])
-    is_admin = m.from_user.id in admins
+    # تشخیص ادمین
+    is_admin = m.from_user.id in (set(settings.admins) if isinstance(settings.admins, list) else set(settings.admins or []))
 
     # ساخت URL ها
     main_ch = await get_setting("MAIN_CHANNEL", None)
@@ -34,13 +34,25 @@ async def start_cmd(m: Message):
     support_url = f"https://t.me/{sup[1:]}" if sup else None
     channel_url = main_ch if (main_ch and main_ch.startswith("http")) else (f"https://t.me/{main_ch[1:]}" if (main_ch and main_ch.startswith("@")) else main_ch)
 
-    await m.answer("خوش آمدید 👋", reply_markup=main_menu(is_admin, channel_url, support_url))
+    # نمایش متن خوش‌آمد بالای منو
+    wtxt = await get_setting("WELCOME_TEXT", None)
+    if not wtxt:
+        try:
+            wtxt = settings.welcome_text
+        except Exception:
+            wtxt = None
+    if wtxt:
+        try:
+            await m.answer(wtxt, parse_mode="HTML")
+        except Exception:
+            await m.answer(wtxt)
+
+    await m.answer("منوی اصلی:", reply_markup=main_menu(is_admin, channel_url, support_url))
 
 @router.callback_query(F.data == "home")
 async def go_home(cb: CallbackQuery):
     from app.config import settings
-    admins = set(map(int, (settings.admins or "").split(","))) if isinstance(settings.admins, str) else set(settings.admins or [])
-    is_admin = cb.from_user.id in admins
+    is_admin = cb.from_user.id in (set(settings.admins) if isinstance(settings.admins, list) else set(settings.admins or []))
 
     main_ch = await get_setting("MAIN_CHANNEL", None)
     sup = await get_setting("SUPPORT_USERNAME", None)

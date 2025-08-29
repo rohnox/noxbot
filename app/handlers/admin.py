@@ -1,7 +1,6 @@
 # -*- coding: utf-8 -*-
 from aiogram import Router, F
 from aiogram.types import CallbackQuery, Message
-from app.utils.reactions import react_emoji
 from aiogram.fsm.state import StatesGroup, State
 from aiogram.fsm.context import FSMContext
 from aiogram.exceptions import TelegramBadRequest
@@ -20,9 +19,8 @@ router = Router()
 
 # ---------- Guards ----------
 async def guard_admin(cb: CallbackQuery) -> bool:
-    from app.config import settings
-    admins = set(map(int, (settings.admins or "").split(","))) if isinstance(settings.admins, str) else set(settings.admins or [])
-    ok = cb.from_user.id in admins
+    from app.config import is_admin
+    ok = is_admin(cb.from_user.id)
     if not ok:
         await cb.answer("مجوز دسترسی ندارید.", show_alert=True)
     return ok
@@ -311,6 +309,15 @@ async def plan_edit_desc(m: Message, state: FSMContext):
     plans = await fetchall("SELECT id, title, price, description FROM plans WHERE product_id=? ORDER BY price ASC", pid)
     await m.answer("✅ پلن ویرایش شد.", reply_markup=admin_plans_list_kb(plans, pid))
 
+
+@router.callback_query(F.data.startswith("admin:edit_price:"))
+async def admin_edit_price_only(cb: CallbackQuery, state: FSMContext):
+    if not await guard_admin(cb):
+        return
+    plid = int(cb.data.split(":")[2])
+    await state.update_data(edit_plan_id=plid)
+    await state.set_state(PlanEditStates.editing_price)
+    await cb.message.answer("💰 قیمت جدید (تومان) را ارسال کنید (فقط عدد).")
 @router.callback_query(F.data.startswith("admin:del_plan:"))
 async def admin_del_plan(cb: CallbackQuery):
     if not await guard_admin(cb):
@@ -379,10 +386,12 @@ async def admin_order_processing(cb: CallbackQuery):
         await execute("UPDATE orders SET tracking_code=? WHERE id=?", trk, oid)
     if row and row["tg_id"]:
         try:
+            await cb.bot.send_message(row["tg_id"], "🔧")
             await cb.bot.send_message(row["tg_id"], f"🔧 سفارش شما با کد پیگیری {trk} در حال انجام است.")
         except Exception:
             pass
-    await cb.answer("🔧 وضعیت «در حال انجام» ثبت شد")
+    await cb.answer("🔧 به حالت در حال انجام تغییر کرد")
+
 @router.callback_query(F.data.startswith("admin:order_complete:"))
 async def admin_order_complete(cb: CallbackQuery):
     if not await guard_admin(cb):
@@ -413,14 +422,12 @@ async def admin_order_reject(cb: CallbackQuery):
         await execute("UPDATE orders SET tracking_code=? WHERE id=?", trk, oid)
     if row and row["tg_id"]:
         try:
-            msg_rej = await cb.bot.send_message(row["tg_id"], f"❌ سفارش شما با کد پیگیری {trk} رد شد. لطفاً با پشتیبانی در ارتباط باشید.")
-            try:
-                await react_emoji(cb.bot, msg_rej.chat.id, msg_rej.message_id, "👎", big=True)
-            except Exception:
-                pass
+            await cb.bot.send_message(row["tg_id"], f"❌ سفارش شما با کد پیگیری {trk} رد شد. لطفاً با پشتیبانی در ارتباط باشید.")
         except Exception:
             pass
     await cb.answer("❌ سفارش رد شد")
+
+# ---------- Find by tracking ----------
 @router.callback_query(F.data == "admin:find_by_trk")
 async def admin_find_by_trk_start(cb: CallbackQuery, state: FSMContext):
     if not await guard_admin(cb):

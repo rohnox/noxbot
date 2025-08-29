@@ -101,6 +101,7 @@ def admin_plans_list_kb(plans, pid: int):
     kb = InlineKeyboardBuilder()
     for pl in plans:
         kb.button(text=f"✏️ ویرایش «{pl['title']}»", callback_data=f"admin:edit_plan:{pl['id']}")
+        kb.button(text=f"💰 قیمت", callback_data=f"admin:edit_price:{pl['id']}")
         kb.button(text=f"❌ حذف", callback_data=f"admin:del_plan:{pl['id']}")
     kb.button(text="➕ افزودن پلن", callback_data=f"admin:add_plan:{pid}")
     kb.button(text="⬅️ محصولات", callback_data="admin:prods")
@@ -122,4 +123,11 @@ def admin_order_actions_kb(order_id: int):
     kb.button(text="❌ رد", callback_data=f"admin:order_reject:{order_id}")
     kb.button(text="⬅️ لیست سفارش‌ها", callback_data="admin:orders")
     kb.adjust(2, 2)
+    return kb.as_markup()
+
+def proofnew_kb(plan_id: int):
+    kb = InlineKeyboardBuilder()
+    kb.button(text="🧾 ارسال رسید", callback_data=f"proofnew:{plan_id}")
+    kb.button(text="❌ انصراف", callback_data="home")
+    kb.adjust(1, 1)
     return kb.as_markup()
