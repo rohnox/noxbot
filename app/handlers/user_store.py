@@ -1,17 +1,11 @@
 # -*- coding: utf-8 -*-
 from aiogram import Router, F
 from aiogram.types import CallbackQuery, Message
+
+from app.db import fetchone, execute, get_setting
+from app.keyboards import proof_kb
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import StatesGroup, State
-
-# ری‌اکشن‌ها (fallback اگر در aiogram موجود نباشد)
-try:
-    from aiogram.types import ReactionTypeEmoji
-except Exception:
-    ReactionTypeEmoji = None
-
-from app.db import fetchone, fetchall, execute, get_setting
-from app.keyboards import proof_kb
 
 router = Router()
 
@@ -42,6 +36,13 @@ def _normalize_chat_id(chat: str | None) -> str | None:
     if s.startswith("@") or s.lstrip("-").isdigit():
         return s
     return "@" + s
+
+async def _send_with_effect(bot, chat_id: int, text: str, effect_key: str):
+    eff = await get_setting(effect_key, None)
+    kwargs = {}
+    if eff:
+        kwargs["message_effect_id"] = eff  # Bot API: message_effect_id
+    return await bot.send_message(chat_id, text, **kwargs)
 
 async def _notify_new_order(bot, order_id: int):
     row = await fetchone(
@@ -76,7 +77,7 @@ async def _notify_new_order(bot, order_id: int):
         except Exception:
             ok = False
 
-    # نوتیف دایرکت برای ادمین‌ها
+    # نوتیف خصوصی برای ادمین‌ها
     try:
         from app.config import settings
         admins = set(map(int, (settings.admins or "").split(","))) if isinstance(settings.admins, str) else set(settings.admins or [])
@@ -110,30 +111,20 @@ async def pay_cb(c: CallbackQuery, state: FSMContext):
         user_id, plan["product_id"], plan_id, "awaiting_proof", trk
     )
 
-    # اطلاع کانال/ادمین‌ها
+    # اعلان به کانال و ادمین‌ها
     await _notify_new_order(c.bot, order_id)
 
-    # کارت
+    # پیام راهنما (بدون افکت) + دکمه ارسال رسید
     card = await get_setting("card_number", "") or "—"
-    info = f"""🔖 کد پیگیری: <b>{trk}</b>
+    guide = f"""🔖 کد پیگیری: <b>{trk}</b>
 
 لطفاً پس از واریز، با دکمه «🧾 ارسال رسید» عکس/فایل رسید را بفرستید.
 مبلغ: {plan['price']:,} تومان
 شماره کارت: {card}"""
+    await c.message.edit_text(guide, reply_markup=proof_kb(order_id), parse_mode="HTML")
 
-    sent = await c.message.edit_text(info, reply_markup=proof_kb(order_id), parse_mode="HTML")
-
-    # ری‌اکشن قلب ❤️ روی پیام
-    if ReactionTypeEmoji:
-        try:
-            await c.bot.set_message_reaction(
-                chat_id=sent.chat.id,
-                message_id=sent.message_id,
-                reaction=[ReactionTypeEmoji(emoji="❤️")],
-                is_big=True
-            )
-        except Exception:
-            pass
+    # پیام جدا با افکت ❤️ برای «ثبت سفارش»
+    await _send_with_effect(c.bot, c.message.chat.id, f"سفارش شما ثبت شد. کد پیگیری {trk}", "EFFECT_CREATED")
 
 # === Proof (رسید پرداخت) ===
 @router.callback_query(F.data.regexp(r"^proof:(\d+)$"))
@@ -152,17 +143,7 @@ async def proof_photo(m: Message, state: FSMContext):
                   "photo", file_id, order_id)
     await _send_proof_to_channel(m, order_id, "photo", file_id)
     await state.clear()
-    sent = await m.answer("✅ رسید شما دریافت شد. پس از بررسی به شما اطلاع می‌دهیم.")
-    if ReactionTypeEmoji:
-        try:
-            await m.bot.set_message_reaction(
-                chat_id=sent.chat.id,
-                message_id=sent.message_id,
-                reaction=[ReactionTypeEmoji(emoji="✅")],
-                is_big=True
-            )
-        except Exception:
-            pass
+    await m.answer("✅ رسید شما دریافت شد. پس از بررسی به شما اطلاع می‌دهیم.")
 
 @router.message(ProofStates.waiting, F.document)
 async def proof_document(m: Message, state: FSMContext):
@@ -173,17 +154,7 @@ async def proof_document(m: Message, state: FSMContext):
                   "document", file_id, order_id)
     await _send_proof_to_channel(m, order_id, "document", file_id)
     await state.clear()
-    sent = await m.answer("✅ رسید شما دریافت شد. پس از بررسی به شما اطلاع می‌دهیم.")
-    if ReactionTypeEmoji:
-        try:
-            await m.bot.set_message_reaction(
-                chat_id=sent.chat.id,
-                message_id=sent.message_id,
-                reaction=[ReactionTypeEmoji(emoji="✅")],
-                is_big=True
-            )
-        except Exception:
-            pass
+    await m.answer("✅ رسید شما دریافت شد. پس از بررسی به شما اطلاع می‌دهیم.")
 
 @router.message(ProofStates.waiting)
 async def proof_wrong(m: Message, state: FSMContext):

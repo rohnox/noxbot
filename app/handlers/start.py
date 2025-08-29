@@ -18,7 +18,7 @@ def _build_urls(main_ch: str | None, sup: str | None):
         elif s.startswith("@"):
             channel_url = f"https://t.me/{s[1:]}"
         elif s.startswith("-100") or s.lstrip("-").isdigit():
-            channel_url = None  # آی‌دی خصوصی؛ لینک‌پذیر نیست
+            channel_url = None  # آیدی خصوصی لینک‌پذیر نیست
     if sup:
         s = sup.strip()
         if not s.startswith("@"):
@@ -30,7 +30,6 @@ def _build_urls(main_ch: str | None, sup: str | None):
 @router.message(F.text == "/start")
 async def start_cmd(m: Message):
     await upsert_user(m.from_user.id, m.from_user.first_name or "", m.from_user.username or "", 0)
-
     from app.config import settings
     admins = set(map(int, (settings.admins or "").split(","))) if isinstance(settings.admins, str) else set(settings.admins or [])
     is_admin = m.from_user.id in admins
@@ -57,7 +56,7 @@ async def go_home(cb: CallbackQuery):
     except TelegramBadRequest:
         await cb.message.answer("منوی اصلی:", reply_markup=main_menu(is_admin, ch_url, sup_url))
 
-# ---- Shop ----
+# ---- فروشگاه ----
 @router.callback_query(F.data == "shop")
 async def shop_menu(cb: CallbackQuery):
     prods = await fetchall("SELECT id, title FROM products ORDER BY id DESC")
@@ -77,7 +76,6 @@ async def shop_menu(cb: CallbackQuery):
 async def shop_product(cb: CallbackQuery):
     pid = int(cb.data.split(":")[1])
 
-    # عنوان و توضیح محصول
     prod = await fetchone("SELECT title FROM products WHERE id=?", pid)
     prod_title = prod["title"] if prod else f"#{pid}"
     desc = await get_setting(f"PROD_DESC_{pid}", None)
@@ -119,3 +117,44 @@ async def shop_plan(cb: CallbackQuery):
         await cb.message.edit_text(txt, reply_markup=pay_kb(plid))
     except TelegramBadRequest:
         await cb.message.answer(txt, reply_markup=pay_kb(plid))
+
+# ---- حساب کاربری ----
+@router.callback_query(F.data == "account")
+async def account_view(cb: CallbackQuery):
+    u = cb.from_user
+    txt = f"""👤 حساب کاربری
+نام: {u.first_name or '-'}
+یوزرنیم: @{u.username or '-'}
+آیدی عددی: {u.id}"""
+    try:
+        await cb.message.edit_text(txt, reply_markup=back_home_kb())
+    except TelegramBadRequest:
+        await cb.message.answer(txt, reply_markup=back_home_kb())
+
+# ---- سفارشات من ----
+@router.callback_query(F.data == "orders_me")
+async def orders_me(cb: CallbackQuery):
+    row = await fetchone("SELECT id FROM users WHERE tg_id=?", cb.from_user.id)
+    if not row:
+        await cb.answer("هنوز ثبت‌نامی برای شما نداریم.", show_alert=True)
+        return
+    uid = int(row["id"]) if isinstance(row, dict) else int(row[0])
+    orders = await fetchall(
+        """SELECT o.id, o.tracking_code, o.status, p.title as plan_title, pr.title as product_title
+           FROM orders o
+           JOIN plans p ON p.id=o.plan_id
+           JOIN products pr ON pr.id=p.product_id
+           WHERE o.user_id=? ORDER BY o.id DESC LIMIT 10""",
+        uid
+    )
+    if not orders:
+        msg = "🧾 هنوز سفارشی ثبت نکرده‌اید."
+    else:
+        lines = []
+        for o in orders:
+            lines.append(f"#{o['id']} | {o['status']} | {o['tracking_code'] or '—'} | {o['product_title']} - {o['plan_title']}")
+        msg = "🧾 سفارش‌های اخیر شما:\n" + "\n".join(lines)
+    try:
+        await cb.message.edit_text(msg, reply_markup=back_home_kb())
+    except TelegramBadRequest:
+        await cb.message.answer(msg, reply_markup=back_home_kb())

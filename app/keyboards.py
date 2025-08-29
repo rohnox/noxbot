@@ -2,27 +2,30 @@
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 
 # ===== User menus =====
-def main_menu(is_admin: bool = False, channel_url: str | None = None, support_url: str | None = None):
+def main_menu(
+    is_admin: bool = False,
+    channel_url: str | None = None,
+    support_url: str | None = None
+):
     kb = InlineKeyboardBuilder()
     kb.button(text="🛍️ فروشگاه", callback_data="shop")
     kb.button(text="📦 سفارشات من", callback_data="orders_me")
     kb.button(text="👤 حساب کاربری", callback_data="account")
 
-    # لینک‌ها (اگر ست نشده باشد، callback قبلی را نگه می‌داریم)
+    # فقط وقتی لینک‌ها تنظیم شده باشند نشان بده
     if channel_url:
         kb.button(text="📣 کانال ما", url=channel_url)
-    else:
-        kb.button(text="📣 کانال ما", callback_data="channel")
-
     if support_url:
         kb.button(text="🆘 پشتیبانی", url=support_url)
-    else:
-        kb.button(text="🆘 پشتیبانی", callback_data="support")
 
     if is_admin:
         kb.button(text="🛠️ پنل مدیریت", callback_data="admin:menu")
 
-    kb.adjust(2, 2, 1, 1)
+    # ردیف‌بندی
+    if channel_url or support_url:
+        kb.adjust(2, 2, 1, 1)  # با لینک‌ها
+    else:
+        kb.adjust(2, 1, 1)     # بدون لینک‌ها
     return kb.as_markup()
 
 def back_home_kb():
@@ -68,10 +71,20 @@ def admin_menu_kb():
     kb.button(text="🧾 سفارش‌ها", callback_data="admin:orders")
     kb.button(text="⚙️ تنظیمات", callback_data="admin:settings")
     kb.button(text="🔎 جستجو با کد پیگیری", callback_data="admin:find_by_trk")
+    kb.button(text="✨ افکت‌ها", callback_data="admin:effects")
     kb.button(text="📨 پیام همگانی", callback_data="admin:broadcast_copy")
     kb.button(text="🔁 فوروارد همگانی", callback_data="admin:broadcast_forward")
     kb.button(text="⬅️ منوی اصلی", callback_data="home")
-    kb.adjust(2, 2, 2, 1, 1)
+    kb.adjust(2, 2, 2, 2, 1)
+    return kb.as_markup()
+
+def admin_effects_kb():
+    kb = InlineKeyboardBuilder()
+    kb.button(text="❤️ افکت ثبت سفارش", callback_data="admin:set_effect:CREATED")
+    kb.button(text="🎉 افکت اتمام سفارش", callback_data="admin:set_effect:COMPLETED")
+    kb.button(text="👎 افکت رد سفارش", callback_data="admin:set_effect:REJECTED")
+    kb.button(text="⬅️ بازگشت", callback_data="admin:menu")
+    kb.adjust(1, 1, 1, 1)
     return kb.as_markup()
 
 def admin_settings_kb():
