@@ -1,11 +1,13 @@
 # -*- coding: utf-8 -*-
 from aiogram import Router, F
 from aiogram.types import CallbackQuery, Message
-
-from app.db import fetchone, execute, get_setting
-from app.keyboards import proof_kb
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import StatesGroup, State
+
+from datetime import datetime
+
+from app.db import fetchone, fetchall, execute, get_setting
+from app.keyboards import proof_kb
 
 router = Router()
 
@@ -26,27 +28,66 @@ async def _get_or_create_user_id(tg_user) -> int:
     )
     return uid
 
-def _normalize_chat_id(chat: str | None) -> str | None:
+def _normalize_chat_id(chat: str | None):
+    """@username -> '@username' (str), link -> '@username', -100.. -> int"""
     if not chat:
         return None
     s = chat.strip()
     if s.startswith("https://t.me/"):
         uname = s.split("/")[-1]
         s = "@" + uname
-    if s.startswith("@") or s.lstrip("-").isdigit():
-        return s
-    return "@" + s
+    if s.lstrip("-").isdigit():
+        return int(s)
+    if not s.startswith("@"):
+        s = "@" + s
+    return s
 
 async def _send_with_effect(bot, chat_id: int, text: str, effect_key: str):
+    """Try message_effect_id; fallback to normal send if it fails."""
     eff = await get_setting(effect_key, None)
-    kwargs = {}
-    if eff:
-        kwargs["message_effect_id"] = eff  # Bot API: message_effect_id
-    return await bot.send_message(chat_id, text, **kwargs)
+    try:
+        if eff:
+            return await bot.send_message(chat_id, text, message_effect_id=eff)
+        return await bot.send_message(chat_id, text)
+    except Exception:
+        # fallback بدون افکت
+        try:
+            return await bot.send_message(chat_id, text)
+        except Exception:
+            return None
+
+async def _ensure_order_columns():
+    """اگر ستون‌های لازم وجود نداشتند اضافه شود (created_at/proof*/tracking_code)."""
+    cols = await fetchall("PRAGMA table_info(orders)")
+    if isinstance(cols, list):
+        names = { (c["name"] if isinstance(c, dict) else c[1]) for c in cols }
+    else:
+        names = set()
+    if "created_at" not in names:
+        try:
+            await execute("ALTER TABLE orders ADD COLUMN created_at TEXT")
+        except Exception:
+            pass
+    if "proof_type" not in names:
+        try:
+            await execute("ALTER TABLE orders ADD COLUMN proof_type TEXT")
+        except Exception:
+            pass
+    if "proof_value" not in names:
+        try:
+            await execute("ALTER TABLE orders ADD COLUMN proof_value TEXT")
+        except Exception:
+            pass
+    if "tracking_code" not in names:
+        try:
+            await execute("ALTER TABLE orders ADD COLUMN tracking_code TEXT")
+        except Exception:
+            pass
 
 async def _notify_new_order(bot, order_id: int):
     row = await fetchone(
-        """SELECT o.id, o.tracking_code, p.title as plan_title, pr.title as product_title, p.price,
+        """SELECT o.id, o.tracking_code, o.created_at,
+                  p.title as plan_title, pr.title as product_title, p.price,
                   u.tg_id, u.username, u.first_name
            FROM orders o
            JOIN plans p ON p.id=o.plan_id
@@ -63,6 +104,7 @@ async def _notify_new_order(bot, order_id: int):
 
     txt = f"""📥 سفارش جدید #{row['id']}
 #️⃣ کد پیگیری: {row['tracking_code']}
+🕒 زمان ثبت: {row.get('created_at') or '-'}
 👤 کاربر: <a href='tg://user?id={row['tg_id']}'>{row['first_name'] or 'کاربر'}</a>
 🔖 یوزرنیم: @{row['username'] or '-'}
 🆔 آیدی عددی: {row['tg_id']}
@@ -70,7 +112,7 @@ async def _notify_new_order(bot, order_id: int):
 💠 پلن: {row['plan_title']}
 💵 قیمت: {row['price']:,} تومان"""
     ok = False
-    if dest:
+    if dest is not None:
         try:
             await bot.send_message(dest, txt, parse_mode="HTML")
             ok = True
@@ -104,17 +146,21 @@ async def pay_cb(c: CallbackQuery, state: FSMContext):
         await c.answer("نامعتبر", show_alert=True)
         return
 
+    await _ensure_order_columns()
+
     user_id = await _get_or_create_user_id(c.from_user)
     trk = _gen_tracking()
+    created_at = datetime.now().strftime("%Y-%m-%d %H:%M")
+
     order_id = await execute(
-        "INSERT INTO orders(user_id, product_id, plan_id, status, tracking_code) VALUES(?,?,?,?,?)",
-        user_id, plan["product_id"], plan_id, "awaiting_proof", trk
+        "INSERT INTO orders(user_id, product_id, plan_id, status, tracking_code, created_at) VALUES(?,?,?,?,?,?)",
+        user_id, plan["product_id"], plan_id, "awaiting_proof", trk, created_at
     )
 
     # اعلان به کانال و ادمین‌ها
     await _notify_new_order(c.bot, order_id)
 
-    # پیام راهنما (بدون افکت) + دکمه ارسال رسید
+    # پیام راهنما + دکمه ارسال رسید (بدون افکت)
     card = await get_setting("card_number", "") or "—"
     guide = f"""🔖 کد پیگیری: <b>{trk}</b>
 
@@ -123,10 +169,13 @@ async def pay_cb(c: CallbackQuery, state: FSMContext):
 شماره کارت: {card}"""
     await c.message.edit_text(guide, reply_markup=proof_kb(order_id), parse_mode="HTML")
 
-    # پیام جدا با افکت ❤️ برای «ثبت سفارش»
-    await _send_with_effect(c.bot, c.message.chat.id, f"سفارش شما ثبت شد. کد پیگیری {trk}", "EFFECT_CREATED")
+    # پیام جدا با افکت «ثبت سفارش»
+    await _send_with_effect(c.bot, c.message.chat.id, f"❤️ سفارش شما ثبت شد. کد پیگیری {trk}", "EFFECT_CREATED")
 
 # === Proof (رسید پرداخت) ===
+class ProofStates(StatesGroup):
+    waiting = State()
+
 @router.callback_query(F.data.regexp(r"^proof:(\d+)$"))
 async def proof_start(c: CallbackQuery, state: FSMContext):
     order_id = int(c.data.split(":")[1])
@@ -163,10 +212,11 @@ async def proof_wrong(m: Message, state: FSMContext):
 async def _send_proof_to_channel(m: Message, order_id: int, kind: str, file_id: str):
     dest_raw = await get_setting("ORDER_CHANNEL", None)
     dest = _normalize_chat_id(dest_raw)
-    if not dest:
+    if dest is None:
         return
     row = await fetchone(
-        """SELECT o.id, o.tracking_code, p.title as plan_title, pr.title as product_title, p.price,
+        """SELECT o.id, o.tracking_code, o.created_at,
+                  p.title as plan_title, pr.title as product_title, p.price,
                   u.tg_id, u.username, u.first_name
            FROM orders o
            JOIN plans p ON p.id=o.plan_id
@@ -179,6 +229,7 @@ async def _send_proof_to_channel(m: Message, order_id: int, kind: str, file_id: 
         return
     caption = f"""🧾 رسید پرداخت برای سفارش #{row['id']}
 #️⃣ کد پیگیری: {row['tracking_code']}
+🕒 زمان ثبت: {row.get('created_at') or '-'}
 👤 کاربر: <a href='tg://user?id={row['tg_id']}'>{row['first_name'] or 'کاربر'}</a>
 🔖 یوزرنیم: @{row['username'] or '-'}
 🆔 آیدی عددی: {row['tg_id']}

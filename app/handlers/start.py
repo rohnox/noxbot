@@ -2,6 +2,7 @@
 from aiogram import Router, F
 from aiogram.types import Message, CallbackQuery
 from aiogram.exceptions import TelegramBadRequest
+from aiogram.filters import CommandStart
 
 from app.db import fetchall, fetchone, get_setting, upsert_user
 from app.keyboards import main_menu, back_home_kb, shop_products_kb, shop_plans_kb, pay_kb
@@ -27,9 +28,10 @@ def _build_urls(main_ch: str | None, sup: str | None):
     return channel_url, support_url
 
 # /start
-@router.message(F.text == "/start")
+@router.message(CommandStart())
 async def start_cmd(m: Message):
     await upsert_user(m.from_user.id, m.from_user.first_name or "", m.from_user.username or "", 0)
+
     from app.config import settings
     admins = set(map(int, (settings.admins or "").split(","))) if isinstance(settings.admins, str) else set(settings.admins or [])
     is_admin = m.from_user.id in admins
@@ -136,11 +138,12 @@ async def account_view(cb: CallbackQuery):
 async def orders_me(cb: CallbackQuery):
     row = await fetchone("SELECT id FROM users WHERE tg_id=?", cb.from_user.id)
     if not row:
-        await cb.answer("هنوز ثبت‌نامی برای شما نداریم.", show_alert=True)
+        await cb.answer("هنوز سفارشی ندارید.", show_alert=True)
         return
     uid = int(row["id"]) if isinstance(row, dict) else int(row[0])
     orders = await fetchall(
-        """SELECT o.id, o.tracking_code, o.status, p.title as plan_title, pr.title as product_title
+        """SELECT o.id, o.tracking_code, o.status, o.created_at,
+                  p.title as plan_title, pr.title as product_title
            FROM orders o
            JOIN plans p ON p.id=o.plan_id
            JOIN products pr ON pr.id=p.product_id
@@ -152,7 +155,8 @@ async def orders_me(cb: CallbackQuery):
     else:
         lines = []
         for o in orders:
-            lines.append(f"#{o['id']} | {o['status']} | {o['tracking_code'] or '—'} | {o['product_title']} - {o['plan_title']}")
+            ct = o.get("created_at") if isinstance(o, dict) else o[3]
+            lines.append(f"#{o['id']} | {o['status']} | {o['tracking_code'] or '—'} | {ct or '-'} | {o['product_title']} - {o['plan_title']}")
         msg = "🧾 سفارش‌های اخیر شما:\n" + "\n".join(lines)
     try:
         await cb.message.edit_text(msg, reply_markup=back_home_kb())
