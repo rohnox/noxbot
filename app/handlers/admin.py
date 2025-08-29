@@ -1,314 +1,492 @@
+# -*- coding: utf-8 -*-
 from aiogram import Router, F
-from aiogram.types import Message, CallbackQuery
-from aiogram.fsm.state import State, StatesGroup
+from aiogram.types import CallbackQuery, Message
+from aiogram.fsm.state import StatesGroup, State
 from aiogram.fsm.context import FSMContext
-from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, delete
-from ..texts import *
-from ..keyboards import admin_panel_kb, admin_settings_kb, categories_kb, products_kb, orders_actions_kb
-from ..utils import IsAdmin, get_or_create_settings
-from ..models import Category, Product, ProductPlan, Setting, Order, OrderStatus
+from aiogram.exceptions import TelegramBadRequest
 
-router = Router(name="admin")
-router.message.filter(IsAdmin())
+from app.db import fetchall, fetchone, execute, get_setting
+from app.keyboards import (
+    admin_menu_kb,
+    admin_settings_kb,
+    admin_prods_kb,
+    admin_plans_list_kb,
+    admin_orders_kb,
+    admin_order_actions_kb,
+)
 
-class AdminStates(StatesGroup):
-    adding_category = State()
-    adding_product = State()
-    setting_desc = State()
-    setting_category_for_product = State()
-    adding_plan = State()
-    setting_required_fields = State()
-    set_support = State()
-    set_channel = State()
-    set_card = State()
-    set_zp_mid = State()
-    set_zp_sb  = State()
-    set_idpay_key = State()
-    set_idpay_sb  = State()
+router = Router()
 
-@router.callback_query(F.data == "set:zp")
-async def set_zp(cb: CallbackQuery, state: FSMContext):
-    await cb.message.answer(ADMIN_PROMPT_ZP_MID); await state.set_state(AdminStates.set_zp_mid)
+# ---------- Guards ----------
+async def guard_admin(cb: CallbackQuery) -> bool:
+    from app.config import settings
+    admins = set(map(int, (settings.admins or "").split(","))) if isinstance(settings.admins, str) else set(settings.admins or [])
+    ok = cb.from_user.id in admins
+    if not ok:
+        await cb.answer("مجوز دسترسی ندارید.", show_alert=True)
+    return ok
 
-@router.message(AdminStates.set_zp_mid)
-async def save_zp_mid(message: Message, db: AsyncSession, state: FSMContext):
-    s = await get_or_create_settings(db); s.zarinpal_merchant_id = message.text.strip(); await db.commit()
-    await message.answer(ADMIN_PROMPT_ZP_SB); await state.set_state(AdminStates.set_zp_sb)
+# ---------- States ----------
+class ProdStates(StatesGroup):
+    adding_title = State()
+    editing_title = State()
 
-@router.message(AdminStates.set_zp_sb)
-async def save_zp_sb(message: Message, db: AsyncSession, state: FSMContext):
-    s = await get_or_create_settings(db); s.zarinpal_sandbox = (message.text.strip() in ("1","true","True")); await db.commit()
-    await message.answer(ADMIN_SAVED); await state.clear()
+class PlanStates(StatesGroup):
+    adding_title = State()
+    adding_price = State()
+    adding_desc = State()
 
-@router.callback_query(F.data == "set:idpay")
-async def set_idpay(cb: CallbackQuery, state: FSMContext):
-    await cb.message.answer(ADMIN_PROMPT_IDPAY_KEY); await state.set_state(AdminStates.set_idpay_key)
+class PlanEditStates(StatesGroup):
+    editing_plan_id = State()
+    editing_title = State()
+    editing_price = State()
+    editing_desc = State()
 
-@router.message(AdminStates.set_idpay_key)
-async def save_idpay_key(message: Message, db: AsyncSession, state: FSMContext):
-    s = await get_or_create_settings(db); s.idpay_api_key = message.text.strip(); await db.commit()
-    await message.answer(ADMIN_PROMPT_IDPAY_SB); await state.set_state(AdminStates.set_idpay_sb)
+class FindStates(StatesGroup):
+    waiting_trk = State()
 
-@router.message(AdminStates.set_idpay_sb)
-async def save_idpay_sb(message: Message, db: AsyncSession, state: FSMContext):
-    s = await get_or_create_settings(db); s.idpay_sandbox = (message.text.strip() in ("1","true","True")); await db.commit()
-    await message.answer(ADMIN_SAVED); await state.clear()
-    
-@router.message(F.text == "/admin")
-async def admin_start(message: Message):
-    await message.answer(ADMIN_PANEL, reply_markup=admin_panel_kb())
+class BroadcastStates(StatesGroup):
+    waiting_copy = State()
+    waiting_forward = State()
 
-@router.message(F.text == ADMIN_SETTINGS)
-async def admin_settings(message: Message, db: AsyncSession):
-    s = await get_or_create_settings(db)
-    txt = (f"یوزرنیم پشتیبانی: @{s.support_username}\n" if s.support_username else "پشتیبانی: تنظیم نشده\n")
-    txt += (f"کانال: @{s.channel_username}\n" if s.channel_username else "کانال: تنظیم نشده\n")
-    txt += (f"کارت: {s.card_number}" if s.card_number else "کارت: تنظیم نشده")
-    await message.answer(txt, reply_markup=admin_settings_kb())
+class SettingsStates(StatesGroup):
+    editing_key = State()
 
-@router.callback_query(F.data == "set:support")
-async def set_support(cb: CallbackQuery, state: FSMContext):
-    await cb.message.answer(ADMIN_PROMPT_SUPPORT)
-    await state.set_state(AdminStates.set_support)
-
-@router.message(AdminStates.set_support)
-async def set_support_save(message: Message, db: AsyncSession, state: FSMContext):
-    s = await get_or_create_settings(db)
-    s.support_username = message.text.strip().lstrip("@")
-    await db.commit()
-    await message.answer(ADMIN_SAVED)
-    await state.clear()
-
-@router.callback_query(F.data == "set:channel")
-async def set_channel(cb: CallbackQuery, state: FSMContext):
-    await cb.message.answer(ADMIN_PROMPT_CHANNEL)
-    await state.set_state(AdminStates.set_channel)
-
-@router.message(AdminStates.set_channel)
-async def set_channel_save(message: Message, db: AsyncSession, state: FSMContext):
-    s = await get_or_create_settings(db)
-    s.channel_username = message.text.strip().lstrip("@")
-    await db.commit()
-    await message.answer(ADMIN_SAVED)
-    await state.clear()
-
-@router.callback_query(F.data == "set:card")
-async def set_card(cb: CallbackQuery, state: FSMContext):
-    await cb.message.answer(ADMIN_PROMPT_CARD)
-    await state.set_state(AdminStates.set_card)
-
-@router.message(AdminStates.set_card)
-async def set_card_save(message: Message, db: AsyncSession, state: FSMContext):
-    s = await get_or_create_settings(db)
-    s.card_number = message.text.strip().replace(" ", "")
-    await db.commit()
-    await message.answer(ADMIN_SAVED)
-    await state.clear()
-
-@router.message(F.text == ADMIN_MANAGE_CATS)
-async def manage_cats(message: Message, db: AsyncSession, state: FSMContext):
-    res = await db.execute(select(Category))
-    cats = res.scalars().all()
-    txt = ADMIN_CATS_LIST + "\n" + "\n".join([f"#{c.id} - {c.title}" for c in cats]) if cats else "هیچ دسته‌ای نیست."
-    await message.answer(txt, reply_markup=None)
-    await message.answer("برای افزودن دسته، متن «/addcat» را بفرستید. برای حذف: «/delcat <id>».")
-
-@router.message(F.text == "/addcat")
-async def add_category_prompt(message: Message, state: FSMContext):
-    await message.answer(ADMIN_ADD_CATEGORY_PROMPT)
-    await state.set_state(AdminStates.adding_category)
-
-@router.message(AdminStates.adding_category)
-async def add_category_save(message: Message, db: AsyncSession, state: FSMContext):
-    db.add(Category(title=message.text.strip()))
-    await db.commit()
-    await message.answer(ADMIN_SAVED)
-    await state.clear()
-
-@router.message(F.text.startswith("/delcat"))
-async def delete_category(message: Message, db: AsyncSession):
+# ---------- Helpers ----------
+async def _safe_edit(message, text, reply_markup=None):
     try:
-        _, cid = message.text.split()
-        cid = int(cid)
-    except:
-        await message.answer("فرمت صحیح: /delcat <id>")
-        return
-    await db.execute(delete(Category).where(Category.id==cid))
-    await db.commit()
-    await message.answer("حذف شد.")
+        await message.edit_text(text, reply_markup=reply_markup)
+    except TelegramBadRequest:
+        await message.answer(text, reply_markup=reply_markup)
 
-@router.message(F.text == ADMIN_MANAGE_PRODUCTS)
-async def manage_products(message: Message, db: AsyncSession):
-    res = await db.execute(select(Product))
-    products = res.scalars().all()
-    if not products:
-        await message.answer("محصولی وجود ندارد. با /addproduct اضافه کنید.")
-        return
-    await message.answer(ADMIN_PRODUCTS_LIST)
-    await message.answer("برای افزودن: /addproduct \nبرای حذف: /delproduct <id>\nبرای تنظیم توضیح: /setdesc <id>\nبرای انتساب دسته: /setcat <id>\nبرای افزودن پلن: /addplan <id>\nبرای فیلدهای لازم: /setfields <id>")
+async def _set_setting(key: str, value: str):
+    await execute(
+        """INSERT INTO settings(key, value) VALUES(?,?)
+           ON CONFLICT(key) DO UPDATE SET value=excluded.value""",
+        key, value
+    )
 
-@router.message(F.text == "/addproduct")
-async def add_product_prompt(message: Message, state: FSMContext):
-    await message.answer(ADMIN_ADD_PRODUCT_PROMPT)
-    await state.set_state(AdminStates.adding_product)
+def _label_for(key: str) -> str:
+    return {
+        "MAIN_CHANNEL": "کانال اصلی",
+        "ORDER_CHANNEL": "کانال سفارش‌ها",
+        "SUPPORT_USERNAME": "یوزرنیم پشتیبانی",
+        "card_number": "شماره کارت",
+        "WELCOME_TEXT": "متن خوش‌آمد",
+    }.get(key, key)
 
-@router.message(AdminStates.adding_product)
-async def add_product_save(message: Message, db: AsyncSession, state: FSMContext):
-    p = Product(title=message.text.strip(), is_active=True)
-    db.add(p)
-    await db.commit()
-    await message.answer(ADMIN_SAVED + " اکنون /setdesc و /addplan را اجرا کنید.")
-    await state.clear()
-
-@router.message(F.text.startswith("/delproduct"))
-async def delete_product(message: Message, db: AsyncSession):
+# ---------- Admin Menu ----------
+@router.callback_query(F.data == "admin:menu")
+async def admin_menu(cb: CallbackQuery, state: FSMContext):
     try:
-        _, pid = message.text.split()
-        pid = int(pid)
-    except:
-        await message.answer("فرمت صحیح: /delproduct <id>")
-        return
-    await db.execute(delete(Product).where(Product.id==pid))
-    await db.commit()
-    await message.answer("حذف شد.")
-
-@router.message(F.text.startswith("/setdesc"))
-async def set_desc_prompt(message: Message, state: FSMContext):
-    try:
-        _, pid = message.text.split()
-        await state.update_data(pid=int(pid))
-        await message.answer(ADMIN_SET_PRODUCT_DESC_PROMPT)
-        await state.set_state(AdminStates.setting_desc)
-    except:
-        await message.answer("فرمت صحیح: /setdesc <id>")
-
-@router.message(AdminStates.setting_desc)
-async def set_desc_save(message: Message, db: AsyncSession, state: FSMContext):
-    data = await state.get_data()
-    pid = data["pid"]
-    res = await db.execute(select(Product).where(Product.id==pid))
-    p = res.scalar_one()
-    if message.text != "/skip":
-        p.description = message.text
-    await db.commit()
-    await message.answer(ADMIN_SAVED)
-    await state.clear()
-
-@router.message(F.text.startswith("/setcat"))
-async def set_cat_prompt(message: Message, state: FSMContext):
-    try:
-        _, pid = message.text.split()
-        await state.update_data(pid=int(pid))
-        await message.answer(ADMIN_SET_PRODUCT_CATEGORY_PROMPT)
-        await state.set_state(AdminStates.setting_category_for_product)
-    except:
-        await message.answer("فرمت صحیح: /setcat <id>")
-
-@router.message(AdminStates.setting_category_for_product)
-async def set_cat_save(message: Message, db: AsyncSession, state: FSMContext):
-    data = await state.get_data()
-    pid = data["pid"]
-    res = await db.execute(select(Product).where(Product.id==pid))
-    p = res.scalar_one()
-    if message.text != "/skip":
-        p.category_id = int(message.text)
-    await db.commit()
-    await message.answer(ADMIN_SAVED)
-    await state.clear()
-
-@router.message(F.text.startswith("/addplan"))
-async def add_plan_prompt(message: Message, state: FSMContext):
-    try:
-        _, pid = message.text.split()
-        await state.update_data(pid=int(pid))
-        await message.answer(ADMIN_ADD_PLAN_PROMPT)
-        await state.set_state(AdminStates.adding_plan)
-    except:
-        await message.answer("فرمت صحیح: /addplan <id>")
-
-@router.message(AdminStates.adding_plan)
-async def add_plan_save(message: Message, db: AsyncSession, state: FSMContext):
-    if message.text == "/done":
-        await message.answer("اتمام افزودن پلن‌ها.")
         await state.clear()
-        return
-    try:
-        title, price = [x.strip() for x in message.text.split("-")]
-        price = float(price.replace(",", ""))
-    except:
-        await message.answer("فرمت صحیح: «عنوان - قیمت». مثال: سه‌ماهه - 150000")
-        return
-    data = await state.get_data()
-    pid = data["pid"]
-    db.add(ProductPlan(product_id=pid, title=title, price=price))
-    await db.commit()
-    await message.answer("پلن ثبت شد. مورد بعدی یا /done")
+    except Exception:
+        pass
+    await _safe_edit(cb.message, "پنل مدیریت:", reply_markup=admin_menu_kb())
 
-@router.message(F.text.startswith("/setfields"))
-async def set_fields_prompt(message: Message, state: FSMContext):
-    try:
-        _, pid = message.text.split()
-        await state.update_data(pid=int(pid))
-        await message.answer(ADMIN_SET_REQUIRED_FIELDS_PROMPT)
-        await state.set_state(AdminStates.setting_required_fields)
-    except:
-        await message.answer("فرمت صحیح: /setfields <id>")
+# ---------- Settings (VIEW + EDIT) ----------
+@router.callback_query(F.data == "admin:settings")
+async def admin_settings(cb: CallbackQuery):
+    if not await guard_admin(cb):
+        return
+    main_ch = await get_setting("MAIN_CHANNEL", "-")
+    order_ch = await get_setting("ORDER_CHANNEL", "-")
+    card = await get_setting("card_number", "-")
+    welcome = await get_setting("WELCOME_TEXT", "-")
+    support = await get_setting("SUPPORT_USERNAME", "-")
+    txt = f"""⚙️ تنظیمات فعلی:
+• کانال اصلی: {main_ch}
+• کانال سفارش‌ها: {order_ch}
+• شماره کارت: {card}
+• پشتیبانی: {support}
+• متن خوش‌آمد: {welcome}
 
-@router.message(AdminStates.setting_required_fields)
-async def set_fields_save(message: Message, db: AsyncSession, state: FSMContext):
-    import json
+برای ویرایش هر مورد، روی دکمه‌اش بزنید."""
+    await _safe_edit(cb.message, txt, reply_markup=admin_settings_kb())
+
+@router.callback_query(F.data.startswith("admin:set:"))
+async def admin_settings_set(cb: CallbackQuery, state: FSMContext):
+    if not await guard_admin(cb):
+        return
+    key = cb.data.split(":")[2]  # MAIN_CHANNEL / ORDER_CHANNEL / SUPPORT_USERNAME / CARD / WELCOME_TEXT
+    if key == "CARD":
+        key = "card_number"
+    label = _label_for(key)
+    await state.update_data(edit_key=key, edit_label=label)
+    await state.set_state(SettingsStates.editing_key)
+    await cb.message.answer(f"📝 مقدار جدید برای «{label}» را ارسال کنید:")
+
+@router.message(SettingsStates.editing_key, F.text)
+async def admin_settings_save(m: Message, state: FSMContext):
     data = await state.get_data()
-    pid = data["pid"]
-    res = await db.execute(select(Product).where(Product.id==pid))
-    p = res.scalar_one()
-    if message.text != "/skip":
-        try:
-            arr = json.loads(message.text)
-            if not isinstance(arr, list):
-                raise ValueError("not a list")
-            p.required_fields = arr
-        except Exception as e:
-            await message.answer("JSON نامعتبر. نمونه صحیح: [\"username_receiver\", \"note\"]")
-            return
-    await db.commit()
-    await message.answer(ADMIN_SAVED)
+    key = data.get("edit_key")
+    label = data.get("edit_label") or key
+    val = (m.text or "").strip()
+    if not val:
+        await m.answer("❌ مقدار نامعتبر است. دوباره ارسال کنید.")
+        return
+    # Normalize support username to start with @
+    if key == "SUPPORT_USERNAME" and not val.startswith("@"):
+        val = "@" + val
+    await _set_setting(key, val)
     await state.clear()
+    await m.answer(f"✅ «{label}» ذخیره شد.")
+    # Show updated overview
+    main_ch = await get_setting("MAIN_CHANNEL", "-")
+    order_ch = await get_setting("ORDER_CHANNEL", "-")
+    card = await get_setting("card_number", "-")
+    welcome = await get_setting("WELCOME_TEXT", "-")
+    support = await get_setting("SUPPORT_USERNAME", "-")
+    txt = f"""⚙️ تنظیمات فعلی:
+• کانال اصلی: {main_ch}
+• کانال سفارش‌ها: {order_ch}
+• شماره کارت: {card}
+• پشتیبانی: {support}
+• متن خوش‌آمد: {welcome}"""
+    await m.answer(txt, reply_markup=admin_settings_kb())
 
-@router.message(F.text == ADMIN_MANAGE_ORDERS)
-async def manage_orders(message: Message, db: AsyncSession):
-    res = await db.execute(select(Order).where(Order.status==OrderStatus.awaiting_manual_review))
-    orders = res.scalars().all()
-    if not orders:
-        await message.answer("سفارش در انتظار بررسی وجود ندارد.")
+# ---------- Products (CRUD) ----------
+@router.callback_query(F.data == "admin:prods")
+async def admin_prods(cb: CallbackQuery):
+    if not await guard_admin(cb):
         return
-    await message.answer(ORDERS_PENDING)
-    for o in orders:
-        await message.answer(
-            ORDER_ROW.format(oid=o.id, uid=o.user_id, amount=int(o.amount), pm=o.payment_method, st=o.status),
-            reply_markup=orders_actions_kb(o.id)
-        )
+    prods = await fetchall("SELECT id, title FROM products ORDER BY id DESC")
+    await _safe_edit(cb.message, "📦 مدیریت محصولات:", reply_markup=admin_prods_kb(prods))
 
-@router.callback_query(F.data.startswith("order:approve:"))
-async def approve_order(cb: CallbackQuery, db: AsyncSession):
+@router.callback_query(F.data == "admin:add_prod")
+async def admin_add_prod(cb: CallbackQuery, state: FSMContext):
+    if not await guard_admin(cb):
+        return
+    await state.set_state(ProdStates.adding_title)
+    await cb.message.answer("عنوان محصول را ارسال کنید:")
+
+@router.message(ProdStates.adding_title, F.text)
+async def admin_add_prod_title(m: Message, state: FSMContext):
+    title = (m.text or "").strip()
+    if not title:
+        await m.answer("❌ عنوان نامعتبر است.")
+        return
+    await execute("INSERT INTO products(title) VALUES(?)", title)
+    await state.clear()
+    prods = await fetchall("SELECT id, title FROM products ORDER BY id DESC")
+    await m.answer("✅ محصول اضافه شد.", reply_markup=admin_prods_kb(prods))
+
+@router.callback_query(F.data.startswith("admin:edit_prod:"))
+async def admin_edit_prod(cb: CallbackQuery, state: FSMContext):
+    if not await guard_admin(cb):
+        return
+    pid = int(cb.data.split(":")[2])
+    await state.update_data(prod_id=pid)
+    await state.set_state(ProdStates.editing_title)
+    await cb.message.answer("✏️ عنوان جدید محصول را ارسال کنید:")
+
+@router.message(ProdStates.editing_title, F.text)
+async def admin_edit_prod_title(m: Message, state: FSMContext):
+    title = (m.text or "").strip()
+    if not title:
+        await m.answer("❌ عنوان نامعتبر است.")
+        return
+    data = await state.get_data()
+    pid = int(data.get("prod_id"))
+    await execute("UPDATE products SET title=? WHERE id=?", title, pid)
+    await state.clear()
+    prods = await fetchall("SELECT id, title FROM products ORDER BY id DESC")
+    await m.answer("✅ محصول ویرایش شد.", reply_markup=admin_prods_kb(prods))
+
+@router.callback_query(F.data.startswith("admin:del_prod:"))
+async def admin_del_prod(cb: CallbackQuery):
+    if not await guard_admin(cb):
+        return
+    pid = int(cb.data.split(":")[2])
+    await execute("DELETE FROM products WHERE id=?", pid)
+    prods = await fetchall("SELECT id, title FROM products ORDER BY id DESC")
+    await _safe_edit(cb.message, "📦 مدیریت محصولات:", reply_markup=admin_prods_kb(prods))
+
+# ---------- Plans (CRUD) ----------
+@router.callback_query(F.data == "admin:plans")
+async def admin_plans(cb: CallbackQuery):
+    if not await guard_admin(cb):
+        return
+    prods = await fetchall("SELECT id, title FROM products ORDER BY id DESC")
+    if not prods:
+        await _safe_edit(cb.message, "هنوز محصولی ندارید. از «📦 محصولات» یک محصول اضافه کنید.", reply_markup=admin_menu_kb())
+        return
+    await _safe_edit(cb.message, "یک محصول را برای مدیریت پلن‌ها انتخاب کنید:", reply_markup=admin_prods_kb(prods))
+
+@router.callback_query(F.data.startswith("admin:plans_for_prod:"))
+async def admin_plans_for_prod(cb: CallbackQuery, state: FSMContext):
+    if not await guard_admin(cb):
+        return
+    pid = int(cb.data.split(":")[2])
+    await state.update_data(prod_id=pid)
+    plans = await fetchall("SELECT id, title, price, description FROM plans WHERE product_id=? ORDER BY price ASC", pid)
+    txt = "💠 پلن‌های این محصول:\n" + ("(خالی)" if not plans else "\n".join([f"- {p['title']} | {p['price']:,} تومان" for p in plans]))
+    await _safe_edit(cb.message, txt, reply_markup=admin_plans_list_kb(plans, pid))
+
+@router.callback_query(F.data.startswith("admin:add_plan:"))
+async def admin_add_plan(cb: CallbackQuery, state: FSMContext):
+    if not await guard_admin(cb):
+        return
+    pid = int(cb.data.split(":")[2])
+    await state.update_data(prod_id=pid)
+    await state.set_state(PlanStates.adding_title)
+    await cb.message.answer("عنوان پلن را ارسال کنید:")
+
+@router.message(PlanStates.adding_title, F.text)
+async def admin_add_plan_title(m: Message, state: FSMContext):
+    t = (m.text or "").strip()
+    if not t:
+        await m.answer("❌ عنوان نامعتبر است.")
+        return
+    await state.update_data(plan_title=t)
+    await state.set_state(PlanStates.adding_price)
+    await m.answer("قیمت پلن (تومان) را ارسال کنید (فقط عدد).")
+
+@router.message(PlanStates.adding_price, F.text)
+async def admin_add_plan_price(m: Message, state: FSMContext):
+    price_text = (m.text or "").replace(",", "").strip()
+    if not price_text.isdigit():
+        await m.answer("❌ قیمت نامعتبر است. فقط عدد تومان ارسال کنید.")
+        return
+    await state.update_data(plan_price=int(price_text))
+    await state.set_state(PlanStates.adding_desc)
+    await m.answer("توضیح پلن را ارسال کنید.")
+
+@router.message(PlanStates.adding_desc, F.text)
+async def admin_add_plan_desc(m: Message, state: FSMContext):
+    data = await state.get_data()
+    pid = int(data.get("prod_id"))
+    title = data.get("plan_title")
+    price = int(data.get("plan_price"))
+    desc = (m.text or "").strip()
+    await execute("INSERT INTO plans(product_id, title, price, description) VALUES(?,?,?,?)", pid, title, price, desc)
+    await state.clear()
+    plans = await fetchall("SELECT id, title, price, description FROM plans WHERE product_id=? ORDER BY price ASC", pid)
+    await m.answer("✅ پلن اضافه شد.", reply_markup=admin_plans_list_kb(plans, pid))
+
+@router.callback_query(F.data.startswith("admin:edit_plan:"))
+async def admin_edit_plan(cb: CallbackQuery, state: FSMContext):
+    if not await guard_admin(cb):
+        return
+    plan_id = int(cb.data.split(":")[2])
+    await state.update_data(edit_plan_id=plan_id)
+    await state.set_state(PlanEditStates.editing_title)
+    await cb.message.answer("✏️ عنوان جدید پلن را ارسال کنید:")
+
+@router.message(PlanEditStates.editing_title, F.text)
+async def plan_edit_title(m: Message, state: FSMContext):
+    t = (m.text or "").strip()
+    if not t:
+        await m.answer("❌ عنوان نامعتبر است.")
+        return
+    data = await state.get_data()
+    plid = int(data.get("edit_plan_id"))
+    await execute("UPDATE plans SET title=? WHERE id=?", t, plid)
+    await state.set_state(PlanEditStates.editing_price)
+    await m.answer("💰 قیمت جدید (تومان) را ارسال کنید (فقط عدد).")
+
+@router.message(PlanEditStates.editing_price, F.text)
+async def plan_edit_price(m: Message, state: FSMContext):
+    price_text = (m.text or "").replace(",", "").strip()
+    if not price_text.isdigit():
+        await m.answer("❌ قیمت نامعتبر است. فقط عدد تومان ارسال کنید.")
+        return
+    price = int(price_text)
+    data = await state.get_data()
+    plid = int(data.get("edit_plan_id"))
+    await execute("UPDATE plans SET price=? WHERE id=?", price, plid)
+    await state.set_state(PlanEditStates.editing_desc)
+    await m.answer("📝 توضیح جدید پلن را ارسال کنید.")
+
+@router.message(PlanEditStates.editing_desc, F.text)
+async def plan_edit_desc(m: Message, state: FSMContext):
+    desc = (m.text or "").strip()
+    data = await state.get_data()
+    plid = int(data.get("edit_plan_id"))
+    await execute("UPDATE plans SET description=? WHERE id=?", desc, plid)
+    row = await fetchone("SELECT product_id FROM plans WHERE id=?", plid)
+    pid = int(row["product_id"]) if row else 0
+    await state.clear()
+    plans = await fetchall("SELECT id, title, price, description FROM plans WHERE product_id=? ORDER BY price ASC", pid)
+    await m.answer("✅ پلن ویرایش شد.", reply_markup=admin_plans_list_kb(plans, pid))
+
+@router.callback_query(F.data.startswith("admin:del_plan:"))
+async def admin_del_plan(cb: CallbackQuery):
+    if not await guard_admin(cb):
+        return
+    plid = int(cb.data.split(":")[2])
+    row = await fetchone("SELECT product_id FROM plans WHERE id=?", plid)
+    pid = int(row["product_id"]) if row else 0
+    await execute("DELETE FROM plans WHERE id=?", plid)
+    plans = await fetchall("SELECT id, title, price, description FROM plans WHERE product_id=? ORDER BY price ASC", pid)
+    txt = "💠 پلن‌های این محصول:\n" + ("(خالی)" if not plans else "\n".join([f"- {p['title']} | {p['price']:,} تومان" for p in plans]))
+    await _safe_edit(cb.message, txt, reply_markup=admin_plans_list_kb(plans, pid))
+
+# ---------- Orders ----------
+@router.callback_query(F.data == "admin:orders")
+async def admin_orders(cb: CallbackQuery):
+    if not await guard_admin(cb):
+        return
+    orders = await fetchall("SELECT id, status FROM orders ORDER BY id DESC LIMIT 20")
+    await _safe_edit(cb.message, "🧾 ۲۰ سفارش اخیر:", reply_markup=admin_orders_kb(orders))
+
+@router.callback_query(F.data.startswith("admin:order_view:"))
+async def admin_order_view(cb: CallbackQuery):
+    if not await guard_admin(cb):
+        return
     oid = int(cb.data.split(":")[2])
-    res = await db.execute(select(Order).where(Order.id==oid))
-    o = res.scalar_one_or_none()
-    if not o:
-        await cb.answer("پیدا نشد.", show_alert=True)
+    row = await fetchone(
+        """SELECT o.id, o.status, o.tracking_code,
+                  p.title as plan_title, pr.title as product_title, p.price,
+                  u.tg_id as user_tg, u.username as user_un
+           FROM orders o
+           JOIN plans p ON p.id=o.plan_id
+           JOIN products pr ON pr.id=o.product_id
+           JOIN users u ON u.id=o.user_id
+           WHERE o.id=?""",
+        oid
+    )
+    if not row:
+        await cb.answer("سفارش یافت نشد.", show_alert=True)
         return
-    o.status = OrderStatus.paid
-    await db.commit()
-    await cb.message.edit_text(ORDER_APPROVED)
 
-@router.callback_query(F.data.startswith("order:reject:"))
-async def reject_order(cb: CallbackQuery, db: AsyncSession):
-    oid = int(cb.data.split(":")[2])
-    res = await db.execute(select(Order).where(Order.id==oid))
-    o = res.scalar_one_or_none()
-    if not o:
-        await cb.answer("پیدا نشد.", show_alert=True)
+    txt = f"""سفارش #{row['id']}
+کد پیگیری: {row['tracking_code'] or '—'}
+کاربر: @{row['user_un'] or '-'}
+آیدی عددی: {row['user_tg']}
+محصول: {row['product_title']}
+پلن: {row['plan_title']}
+قیمت: {row['price']:,} تومان
+وضعیت: {row['status']}"""
+
+    await _safe_edit(cb.message, txt, reply_markup=admin_order_actions_kb(row['id']))
+
+
+async def _gen_tracking():
+    import random, string
+    return ''.join(random.choices(string.ascii_uppercase + string.digits, k=8))
+
+@router.callback_query(F.data.startswith("admin:order_processing:"))
+async def admin_order_processing(cb: CallbackQuery):
+    if not await guard_admin(cb):
         return
-    o.status = OrderStatus.canceled
-    await db.commit()
-    await cb.message.edit_text(ORDER_REJECTED)
+    oid = int(cb.data.split(":")[2])
+    await execute("UPDATE orders SET status='processing' WHERE id=?", oid)
+    row = await fetchone("SELECT tracking_code, u.tg_id FROM orders o JOIN users u ON u.id=o.user_id WHERE o.id=?", oid)
+    trk = row["tracking_code"] or await _gen_tracking()
+    if not row["tracking_code"]:
+        await execute("UPDATE orders SET tracking_code=? WHERE id=?", trk, oid)
+    if row and row["tg_id"]:
+        try:
+            await cb.bot.send_message(row["tg_id"], "🔧")
+            await cb.bot.send_message(row["tg_id"], f"🔧 سفارش شما با کد پیگیری {trk} در حال انجام است.")
+        except Exception:
+            pass
+    await cb.answer("🔧 به حالت در حال انجام تغییر کرد")
+
+@router.callback_query(F.data.startswith("admin:order_complete:"))
+async def admin_order_complete(cb: CallbackQuery):
+    if not await guard_admin(cb):
+        return
+    oid = int(cb.data.split(":")[2])
+    await execute("UPDATE orders SET status='completed' WHERE id=?", oid)
+    row = await fetchone("SELECT tracking_code, u.tg_id FROM orders o JOIN users u ON u.id=o.user_id WHERE o.id=?", oid)
+    trk = row["tracking_code"] or await _gen_tracking()
+    if not row["tracking_code"]:
+        await execute("UPDATE orders SET tracking_code=? WHERE id=?", trk, oid)
+    if row and row["tg_id"]:
+        try:
+            await cb.bot.send_message(row["tg_id"], "🎉")
+            await cb.bot.send_message(row["tg_id"], f"🎉 سفارش شما با کد پیگیری {trk} انجام شد.")
+        except Exception:
+            pass
+    await cb.answer("✅ اتمام کار ثبت شد")
+
+@router.callback_query(F.data.startswith("admin:order_reject:"))
+async def admin_order_reject(cb: CallbackQuery):
+    if not await guard_admin(cb):
+        return
+    oid = int(cb.data.split(":")[2])
+    await execute("UPDATE orders SET status='rejected' WHERE id=?", oid)
+    row = await fetchone("SELECT tracking_code, u.tg_id FROM orders o JOIN users u ON u.id=o.user_id WHERE o.id=?", oid)
+    trk = row["tracking_code"] or await _gen_tracking()
+    if not row["tracking_code"]:
+        await execute("UPDATE orders SET tracking_code=? WHERE id=?", trk, oid)
+    if row and row["tg_id"]:
+        try:
+            await cb.bot.send_message(row["tg_id"], f"❌ سفارش شما با کد پیگیری {trk} رد شد. لطفاً با پشتیبانی در ارتباط باشید.")
+        except Exception:
+            pass
+    await cb.answer("❌ سفارش رد شد")
+
+# ---------- Find by tracking ----------
+@router.callback_query(F.data == "admin:find_by_trk")
+async def admin_find_by_trk_start(cb: CallbackQuery, state: FSMContext):
+    if not await guard_admin(cb):
+        return
+    await state.set_state(FindStates.waiting_trk)
+    await _safe_edit(cb.message, "کد پیگیری سفارش را ارسال کنید:", reply_markup=admin_menu_kb())
+
+@router.message(FindStates.waiting_trk, F.text)
+async def admin_find_by_trk_recv(m: Message, state: FSMContext):
+    code = (m.text or "").strip().upper()
+    await state.clear()
+    row = await fetchone(
+        """SELECT o.id, o.status, o.tracking_code,
+                  p.title as plan_title, pr.title as product_title, p.price
+           FROM orders o
+           JOIN plans p ON p.id=o.plan_id
+           JOIN products pr ON pr.id=o.product_id
+           WHERE o.tracking_code=?""", code
+    )
+    if not row:
+        await m.answer("یافت نشد. مطمئنید کد پیگیری درست است؟", reply_markup=admin_menu_kb())
+        return
+    txt = f"""سفارش #{row['id']}
+کد پیگیری: {row['tracking_code']}
+محصول: {row['product_title']}
+پلن: {row['plan_title']}
+قیمت: {row['price']:,} تومان
+وضعیت: {row['status']}"""
+    await m.answer(txt, reply_markup=admin_order_actions_kb(row['id']))
+
+# ---------- Broadcast ----------
+@router.callback_query(F.data == "admin:broadcast_copy")
+async def admin_broadcast_copy(cb: CallbackQuery, state: FSMContext):
+    if not await guard_admin(cb):
+        return
+    await state.set_state(BroadcastStates.waiting_copy)
+    await _safe_edit(cb.message, "پیامی که باید «کپی» شود را ارسال کنید.", reply_markup=admin_menu_kb())
+
+@router.message(BroadcastStates.waiting_copy)
+async def broadcast_copy_message(m: Message, state: FSMContext):
+    users = await fetchall("SELECT tg_id FROM users WHERE tg_id IS NOT NULL")
+    sent = 0
+    for u in users:
+        try:
+            await m.bot.copy_message(chat_id=u["tg_id"], from_chat_id=m.chat.id, message_id=m.message_id)
+            sent += 1
+        except Exception:
+            pass
+    await state.clear()
+    await m.answer(f"✅ ارسال کپی برای {sent} کاربر انجام شد.", reply_markup=admin_menu_kb())
+
+@router.callback_query(F.data == "admin:broadcast_forward")
+async def admin_broadcast_forward(cb: CallbackQuery, state: FSMContext):
+    if not await guard_admin(cb):
+        return
+    await state.set_state(BroadcastStates.waiting_forward)
+    await _safe_edit(cb.message, "پیامی که باید «فوروارد» شود را ارسال کنید.", reply_markup=admin_menu_kb())
+
+@router.message(BroadcastStates.waiting_forward)
+async def broadcast_forward_message(m: Message, state: FSMContext):
+    users = await fetchall("SELECT tg_id FROM users WHERE tg_id IS NOT NULL")
+    sent = 0
+    for u in users:
+        try:
+            await m.bot.forward_message(chat_id=u["tg_id"], from_chat_id=m.chat.id, message_id=m.message_id)
+            sent += 1
+        except Exception:
+            pass
+    await state.clear()
+    await m.answer(f"✅ فوروارد برای {sent} کاربر انجام شد.", reply_markup=admin_menu_kb())
