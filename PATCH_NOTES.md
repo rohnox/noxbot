@@ -1,21 +1,19 @@
-# Patch Notes (noxbot)
+# Patch Notes (noxbot, fixed newlines)
 
-- Added animated typing effect helpers (send_with_effect / edit_with_effect).
-- Admin notification on new order (reads ADMINS from env).
-- Welcome text displayed above main menu on /start (WELCOME_TEXT env).
-- Idempotent DB migration to add products.description.
-- Best-effort hints for keyboards/admin for product description editing.
+- Fixed newline issue in injected imports to avoid SyntaxError.
+- Added animated typing effect helpers.
+- Admin notification on new order.
+- Welcome text at /start.
+- Idempotent DB migration for products.description.
 
 ## Logs
-✅ Added: app/utils/effects.py, app/utils/admin_notify.py, app/utils/datetime_helpers.py
-⚠️ Pattern not found for injection in app/handlers/user_store.py: (order\s*=\s*.*?create.*?\))...
-⚠️ Pattern not found for injection in app/handlers/user_store.py: (await\s+bot\.send_message\([^\n]*['\"](?:رسید|فرم)['\"][^\n...
+✅ Added helper modules with proper newlines.
+⚠️ Pattern not found in app/handlers/user_store.py: (order\s*=\s*.*?create.*?\))...
 ✍️ Patched: app/handlers/user_store.py
-⚠️ Pattern not found for injection in app/handlers/admin.py: (await\s+bot\.send_message\(\s*([^\),]+)\s*,\s*([^\)]+وضعیت[...
 ✍️ Patched: app/handlers/admin.py
 ✍️ Patched: app/handlers/start.py
-⚠️ Pattern not found for injection in app/db.py: (def\s+init_db\([^\)]*\):\s*\n)...
+⚠️ Pattern not found in app/db.py: (def\s+init_db\([^\)]*\):\s*\n)...
 ℹ️ No changes needed: app/db.py
-⚠️ Pattern not found for injection in app/keyboards.py: (def\s+admin_product_keyboard[^\n]*:\s*\n)...
+⚠️ Pattern not found in app/keyboards.py: (def\s+admin_product_keyboard[^\n]*:\s*\n)...
 ℹ️ No changes needed: app/keyboards.py
 ✍️ Patched: app/services/orders.py

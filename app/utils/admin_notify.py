@@ -14,7 +14,6 @@ async def _parse_admins(env_value: str) -> List[int]:
     return out
 
 async def get_admin_ids() -> List[int]:
-    # Priority: ENV ADMINS -> fallback config or settings if any in app.config
     env_admins = os.getenv("ADMINS", "")
     ids = await _parse_admins(env_admins)
     if ids:
@@ -30,5 +29,4 @@ async def notify_admins(bot: Bot, text: str) -> None:
         try:
             await bot.send_message(admin_id, text, parse_mode="HTML")
         except Exception:
-            # ignore delivery errors to individual admins
             pass

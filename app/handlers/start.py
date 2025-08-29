@@ -2,7 +2,8 @@
 from aiogram import Router, F
 
 import os
-from app.utils.effects import send_with_effectfrom aiogram.types import Message, CallbackQuery
+from app.utils.effects import send_with_effect
+from aiogram.types import Message, CallbackQuery
 from aiogram.exceptions import TelegramBadRequest
 
 from app.db import fetchall, fetchone, get_setting, upsert_user

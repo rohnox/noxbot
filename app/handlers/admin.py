@@ -1,7 +1,8 @@
 # -*- coding: utf-8 -*-
 from aiogram import Router, F
 
-from app.utils.effects import send_with_effect, edit_with_effectfrom aiogram.types import CallbackQuery, Message
+from app.utils.effects import send_with_effect, edit_with_effect
+from aiogram.types import CallbackQuery, Message
 from aiogram.fsm.state import StatesGroup, State
 from aiogram.fsm.context import FSMContext
 from aiogram.exceptions import TelegramBadRequest
