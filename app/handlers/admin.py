@@ -19,8 +19,19 @@ router = Router()
 
 # ---------- Guards ----------
 async def guard_admin(cb: CallbackQuery) -> bool:
-    from app.config import is_admin
-    ok = is_admin(cb.from_user.id)
+    try:
+        from app.config import is_admin
+        ok = is_admin(cb.from_user.id)
+    except Exception:
+        from app.config import settings
+        admins = settings.admins
+        if isinstance(admins, str):
+            admins = [a.strip() for a in admins.split(",") if a.strip()]
+        try:
+            admins = set(map(int, admins))
+        except Exception:
+            admins = set()
+        ok = cb.from_user.id in admins
     if not ok:
         await cb.answer("مجوز دسترسی ندارید.", show_alert=True)
     return ok
@@ -28,6 +39,7 @@ async def guard_admin(cb: CallbackQuery) -> bool:
 # ---------- States ----------
 class ProdStates(StatesGroup):
     adding_title = State()
+    adding_desc = State()
     editing_title = State()
 
 class PlanStates(StatesGroup):
@@ -165,10 +177,10 @@ async def admin_add_prod_title(m: Message, state: FSMContext):
     if not title:
         await m.answer("❌ عنوان نامعتبر است.")
         return
-    await execute("INSERT INTO products(title) VALUES(?)", title)
-    await state.clear()
-    prods = await fetchall("SELECT id, title FROM products ORDER BY id DESC")
-    await m.answer("✅ محصول اضافه شد.", reply_markup=admin_prods_kb(prods))
+    await state.update_data(prod_title=title)
+    await state.set_state(ProdStates.adding_desc)
+    await m.answer("📝 توضیح محصول را ارسال کنید (اختیاری). برای رد شدن، یک خط تیره '-' بفرستید.")
+(prods))
 
 @router.callback_query(F.data.startswith("admin:edit_prod:"))
 async def admin_edit_prod(cb: CallbackQuery, state: FSMContext):
@@ -498,3 +510,18 @@ async def broadcast_forward_message(m: Message, state: FSMContext):
             pass
     await state.clear()
     await m.answer(f"✅ فوروارد برای {sent} کاربر انجام شد.", reply_markup=admin_menu_kb())
+
+@router.message(ProdStates.adding_desc, F.text)
+async def admin_add_prod_desc(m: Message, state: FSMContext):
+    data = await state.get_data()
+    title = data.get("prod_title") or ""
+    desc = (m.text or "").strip()
+    if desc == "-":
+        desc = ""
+    try:
+        await execute("INSERT INTO products(title, description) VALUES(?,?)", title, desc)
+    except Exception:
+        await execute("INSERT INTO products(title) VALUES(?)", title)
+    await state.clear()
+    prods = await fetchall("SELECT id, title FROM products ORDER BY id DESC")
+    await m.answer("✅ محصول اضافه شد.", reply_markup=admin_prods_kb(prods))

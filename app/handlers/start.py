@@ -20,13 +20,25 @@ from app.keyboards import main_menu, back_home_kb, shop_products_kb, shop_plans_
 # /start
 @router.message(F.text == "/start")
 async def start_cmd(m: Message):
+    # ثبت/به‌روز کاربر
     await upsert_user(m.from_user.id, m.from_user.first_name or "", m.from_user.username or "", 0)
 
+    # محاسبه نقش ادمین
     from app.config import settings
-    # تشخیص ادمین
-    is_admin = m.from_user.id in (set(settings.admins) if isinstance(settings.admins, list) else set(settings.admins or []))
+    try:
+        from app.config import is_admin as _is_admin
+        is_admin_flag = _is_admin(m.from_user.id)
+    except Exception:
+        admins = settings.admins
+        if isinstance(admins, str):
+            admins = [a.strip() for a in admins.split(",") if a.strip()]
+        try:
+            admins = set(map(int, admins))
+        except Exception:
+            admins = set()
+        is_admin_flag = m.from_user.id in admins
 
-    # ساخت URL ها
+    # لینک‌ها
     main_ch = await get_setting("MAIN_CHANNEL", None)
     sup = await get_setting("SUPPORT_USERNAME", None)
     if sup and not sup.startswith("@"):
@@ -34,25 +46,26 @@ async def start_cmd(m: Message):
     support_url = f"https://t.me/{sup[1:]}" if sup else None
     channel_url = main_ch if (main_ch and main_ch.startswith("http")) else (f"https://t.me/{main_ch[1:]}" if (main_ch and main_ch.startswith("@")) else main_ch)
 
-    # نمایش متن خوش‌آمد بالای منو
-    wtxt = await get_setting("WELCOME_TEXT", None)
-    if not wtxt:
+    # متن خوش‌آمد بالای منو
+    welcome = await get_setting("WELCOME_TEXT", None)
+    if not welcome:
         try:
-            wtxt = settings.welcome_text
+            welcome = settings.welcome_text
         except Exception:
-            wtxt = None
-    if wtxt:
+            welcome = None
+    if welcome:
         try:
-            await m.answer(wtxt, parse_mode="HTML")
+            await m.answer(welcome, parse_mode="HTML")
         except Exception:
-            await m.answer(wtxt)
+            await m.answer(welcome)
 
-    await m.answer("منوی اصلی:", reply_markup=main_menu(is_admin, channel_url, support_url))
+    await m.answer("منوی اصلی:", reply_markup=main_menu(is_admin_flag, channel_url, support_url))
 
 @router.callback_query(F.data == "home")
 async def go_home(cb: CallbackQuery):
     from app.config import settings
-    is_admin = cb.from_user.id in (set(settings.admins) if isinstance(settings.admins, list) else set(settings.admins or []))
+    admins = set(map(int, (settings.admins or "").split(","))) if isinstance(settings.admins, str) else set(settings.admins or [])
+    is_admin = cb.from_user.id in admins
 
     main_ch = await get_setting("MAIN_CHANNEL", None)
     sup = await get_setting("SUPPORT_USERNAME", None)
@@ -102,7 +115,7 @@ async def shop_product(cb: CallbackQuery):
 async def shop_plan(cb: CallbackQuery):
     plid = int(cb.data.split(":")[1])
     row = await fetchone(
-        "SELECT p.title as plan_title, p.price, p.description, pr.title as product_title "
+        "SELECT p.title as plan_title, p.price, pr.title as product_title, pr.description as product_description "
         "FROM plans p JOIN products pr ON pr.id=p.product_id WHERE p.id=?",
         plid,
     )
@@ -114,7 +127,7 @@ async def shop_plan(cb: CallbackQuery):
 عنوان: {row['plan_title']}
 قیمت: {row['price']:,} تومان
 —
-{row['description']}"""
+{row.get('product_description') or ''}"""
     try:
         await cb.message.edit_text(txt, reply_markup=pay_kb(plid))
     except TelegramBadRequest:

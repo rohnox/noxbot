@@ -74,10 +74,11 @@ async def _notify_new_order(bot, order_id: int):
         return False
 
 @router.callback_query(F.data.regexp(r"^pay:(\d+)$"))
+@router.callback_query(F.data.startswith("pay:"))
 async def pay_cb(c: CallbackQuery, state: FSMContext):
     plan_id = int(c.data.split(":")[1])
     plan = await fetchone(
-        """SELECT p.id as plan_id, p.title as plan_title, p.price, p.description,
+        """SELECT p.id as plan_id, p.title as plan_title, p.price,
                   pr.title as product_title, pr.id as product_id
            FROM plans p JOIN products pr ON pr.id=p.product_id WHERE p.id=?""",
         plan_id
@@ -86,7 +87,6 @@ async def pay_cb(c: CallbackQuery, state: FSMContext):
         await c.answer("نامعتبر", show_alert=True)
         return
 
-    # کارت
     card = await get_setting("card_number", "") or "—"
 
     info = f"""🔖 اطلاعات پرداخت
@@ -95,7 +95,7 @@ async def pay_cb(c: CallbackQuery, state: FSMContext):
 مبلغ: {plan['price']:,} تومان
 شماره کارت: {card}
 
-پس از واریز، با دکمه «🧾 ارسال رسید»، عکس/فایل رسید را ارسال کنید.
+پس از واریز، روی دکمه «🧾 ارسال رسید» بزنید و عکس/فایل رسید را ارسال کنید.
 (تا قبل از ارسال رسید، سفارش ثبت نمی‌شود)"""
 
     await state.set_state(ProofStates.waiting)
@@ -105,7 +105,6 @@ async def pay_cb(c: CallbackQuery, state: FSMContext):
     except Exception:
         await c.message.answer(info, reply_markup=proofnew_kb(plan['plan_id']), parse_mode="HTML")
 
-# === Proof (رسید پرداخت) ===
 @router.callback_query(F.data.regexp(r"^proof:(\d+)$"))
 async def proof_start(c: CallbackQuery, state: FSMContext):
     order_id = int(c.data.split(":")[1])
@@ -121,7 +120,6 @@ async def proof_photo(m: Message, state: FSMContext):
     file_id = m.photo[-1].file_id
 
     if plan_id and product_id:
-        # Create order now (first time)
         user_id = await _get_or_create_user_id(m.from_user)
         trk = _gen_tracking()
         order_id = await execute(
@@ -131,21 +129,13 @@ async def proof_photo(m: Message, state: FSMContext):
         await _send_proof_to_channel(m, order_id, "photo", file_id)
         await state.clear()
     else:
-        # Backward compatibility (had order_id in state)
         order_id = int(data.get("order_id"))
         await execute("UPDATE orders SET proof_type=?, proof_value=?, status='awaiting_review' WHERE id=?", "photo", file_id, order_id)
         await _send_proof_to_channel(m, order_id, "photo", file_id)
         await state.clear()
 
     await m.answer("✅ رسید شما دریافت شد. پس از بررسی به شما اطلاع می‌دهیم.")
-    try:
-        await react_emoji(m.bot, m.chat.id, m.message_id, "❤️", big=True)
-    except Exception:
-        pass
-
     # نمایش منوی اصلی
-    from app.config import is_admin
-    from app.keyboards import main_menu
     kb = main_menu(is_admin(m.from_user.id))
     await m.answer("منوی اصلی:", reply_markup=kb)
 
@@ -172,15 +162,10 @@ async def proof_document(m: Message, state: FSMContext):
         await state.clear()
 
     await m.answer("✅ رسید شما دریافت شد. پس از بررسی به شما اطلاع می‌دهیم.")
-    try:
-        await react_emoji(m.bot, m.chat.id, m.message_id, "❤️", big=True)
-    except Exception:
-        pass
-
-    from app.config import is_admin
-    from app.keyboards import main_menu
+    # نمایش منوی اصلی
     kb = main_menu(is_admin(m.from_user.id))
     await m.answer("منوی اصلی:", reply_markup=kb)
+
 @router.message(ProofStates.waiting)
 async def proof_wrong(m: Message, state: FSMContext):
     await m.answer("لطفاً فقط عکس یا فایلِ رسید را ارسال کنید.")
@@ -222,10 +207,10 @@ async def _send_proof_to_channel(m: Message, order_id: int, kind: str, file_id: 
 @router.callback_query(F.data.regexp(r"^proofnew:(\d+)$"))
 async def proof_new(c: CallbackQuery, state: FSMContext):
     plan_id = int(c.data.split(":")[1])
-    # Ensure state has plan_id/product_id
     plan = await fetchone("SELECT id as plan_id, product_id FROM plans WHERE id=?", plan_id)
     if not plan:
-        await c.answer("پلن نامعتبر است.", show_alert=True); return
+        await c.answer("پلن نامعتبر است.", show_alert=True); 
+        return
     await state.set_state(ProofStates.waiting)
     await state.update_data(plan_id=plan['plan_id'], product_id=plan['product_id'])
     await c.message.answer("🧾 رسید پرداخت را به‌صورت عکس یا فایل بفرستید.")
