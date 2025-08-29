@@ -398,9 +398,9 @@ async def admin_order_complete(cb: CallbackQuery):
     if row and row["tg_id"]:
         try:
             await cb.bot.send_message(row["tg_id"], "🎉")
-            __msg = await cb.bot.send_message(row["tg_id"], f"🎉 سفارش شما با کد پیگیری {trk} انجام شد.")
+            msg_done = await cb.bot.send_message(row["tg_id"], f"🎉 سفارش شما با کد پیگیری {trk} انجام شد.")
         try:
-            await react_emoji(cb.bot, __msg.chat.id, __msg.message_id, "🎉", big=True)
+            await react_emoji(cb.bot, msg_done.chat.id, msg_done.message_id, "🎉", big=True)
         except Exception:
             pass
         except Exception:
@@ -419,9 +419,9 @@ async def admin_order_reject(cb: CallbackQuery):
         await execute("UPDATE orders SET tracking_code=? WHERE id=?", trk, oid)
     if row and row["tg_id"]:
         try:
-            __msg = await cb.bot.send_message(row["tg_id"], f"❌ سفارش شما با کد پیگیری {trk} رد شد. لطفاً با پشتیبانی در ارتباط باشید.")
+            msg_rej = await cb.bot.send_message(row["tg_id"], f"❌ سفارش شما با کد پیگیری {trk} رد شد. لطفاً با پشتیبانی در ارتباط باشید.")
         try:
-            await react_emoji(cb.bot, __msg.chat.id, __msg.message_id, "👎", big=True)
+            await react_emoji(cb.bot, msg_rej.chat.id, msg_rej.message_id, "👎", big=True)
         except Exception:
             pass
         except Exception:

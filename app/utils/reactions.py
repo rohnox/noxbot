@@ -1,18 +1,11 @@
 # -*- coding: utf-8 -*-
-from typing import Optional, Sequence
 from aiogram import Bot
-
-# aiogram export paths differ by version; try both
 try:
-    from aiogram.types import ReactionTypeEmoji  # aiogram >=3.15
+    from aiogram.types import ReactionTypeEmoji  # aiogram v3
 except Exception:  # pragma: no cover
-    from aiogram.types.reaction_type_emoji import ReactionTypeEmoji  # fallback
+    from aiogram.types.reaction_type_emoji import ReactionTypeEmoji
 
 async def react_emoji(bot: Bot, chat_id: int, message_id: int, emoji: str, big: bool = True) -> bool:
-    """
-    Set a reaction (emoji) on a specific message.
-    Requires Bot API 7.0+ and bot permissions in the chat/channel.
-    """
     try:
         await bot.set_message_reaction(
             chat_id=chat_id,

@@ -43,11 +43,8 @@ async def _notify_new_order(bot, order_id: int):
         return False
     dest = await get_setting("ORDER_CHANNEL", None)
     if not dest:
-        try:
-            from app.config import settings
-            dest = settings.order_channel
-        except Exception:
-            dest = None
+        from app.config import settings
+        dest = settings.order_channel
     if not dest:
         return False
 
@@ -105,7 +102,11 @@ async def pay_cb(c: CallbackQuery, state: FSMContext):
     # کارت
     card = await get_setting("card_number", "") or "—"
 
-    \1⏰ زمان ثبت: <b>{(await fetchone('SELECT created_at FROM orders WHERE id=?', order_id))['created_at']}</b>
+    row_time = await fetchone("SELECT created_at FROM orders WHERE id=?", order_id)
+    created_at = row_time["created_at"] if row_time and "created_at" in row_time.keys() else "-"
+
+    info = f"""🔖 کد پیگیری: <b>{trk}</b>
+⏰ زمان ثبت: <b>{created_at}</b>
 
 لطفاً پس از واریز، با دکمه «🧾 ارسال رسید» عکس/فایل رسید را بفرستید.
 مبلغ: {plan['price']:,} تومان
@@ -160,11 +161,8 @@ async def proof_wrong(m: Message, state: FSMContext):
 async def _send_proof_to_channel(m: Message, order_id: int, kind: str, file_id: str):
     dest = await get_setting("ORDER_CHANNEL", None)
     if not dest:
-        try:
-            from app.config import settings
-            dest = settings.order_channel
-        except Exception:
-            dest = None
+        from app.config import settings
+        dest = settings.order_channel
     if not dest:
         return
     row = await fetchone(
@@ -196,44 +194,3 @@ async def _send_proof_to_channel(m: Message, order_id: int, kind: str, file_id: 
     except Exception:
         pass
 
-
-
-# --- override/fix: _notify_new_order (async + env fallback) ---
-async def _notify_new_order(bot, order_id: int) -> bool:
-    row = await fetchone(
-        """SELECT o.id, o.tracking_code, p.title as plan_title, pr.title as product_title, p.price,
-                  u.tg_id, u.username, u.first_name
-           FROM orders o
-           JOIN plans p ON p.id=o.plan_id
-           JOIN products pr ON pr.id=p.product_id
-           JOIN users u ON u.id=o.user_id
-           WHERE o.id=?""",
-        order_id
-    )
-    if not row:
-        return False
-    dest = await get_setting("ORDER_CHANNEL", None)
-    if not dest:
-        try:
-            from app.config import settings
-            dest = settings.order_channel
-        except Exception:
-            dest = None
-    if not dest:
-        return False
-
-    mention = f"<a href='tg://user?id={row['tg_id']}'>{row['first_name'] or 'کاربر'}</a>"
-    txt = f"""📥 سفارش جدید #{row['id']}
-#️⃣ کد پیگیری: {row['tracking_code']}
-👤 کاربر: {mention}
-🔖 یوزرنیم: @{row['username'] or '-'}
-🆔 آیدی عددی: {row['tg_id']}
-📦 محصول: {row['product_title']}
-💠 پلن: {row['plan_title']}
-💵 قیمت: {row['price']:,} تومان"""
-    try:
-        await bot.send_message(dest, txt, parse_mode="HTML")
-        return True
-    except Exception:
-        return False
-# --- end override ---
