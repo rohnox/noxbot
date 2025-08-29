@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 from aiogram import Bot
 try:
-    from aiogram.types import ReactionTypeEmoji  # aiogram v3
+    from aiogram.types import ReactionTypeEmoji
 except Exception:  # pragma: no cover
     from aiogram.types.reaction_type_emoji import ReactionTypeEmoji
 
