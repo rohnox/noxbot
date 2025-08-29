@@ -1,9 +1,15 @@
 # -*- coding: utf-8 -*-
 from aiogram import Router, F
-from aiogram.types import CallbackQuery, Message, ReactionTypeEmoji
+from aiogram.types import CallbackQuery, Message
 from aiogram.fsm.state import StatesGroup, State
 from aiogram.fsm.context import FSMContext
 from aiogram.exceptions import TelegramBadRequest
+
+# ری‌اکشن‌ها (fallback اگر در aiogram موجود نباشد)
+try:
+    from aiogram.types import ReactionTypeEmoji
+except Exception:
+    ReactionTypeEmoji = None
 
 from app.db import fetchall, fetchone, execute, get_setting
 from app.keyboards import (
@@ -203,7 +209,7 @@ async def admin_del_prod(cb: CallbackQuery):
         return
     pid = int(cb.data.split(":")[2])
     await execute("DELETE FROM products WHERE id=?", pid)
-    await _set_setting(f"PROD_DESC_{pid}", "")  # پاک‌سازی توضیح ذخیره‌شده
+    await _set_setting(f"PROD_DESC_{pid}", "")
     prods = await fetchall("SELECT id, title FROM products ORDER BY id DESC")
     await _safe_edit(cb.message, "📦 مدیریت محصولات:", reply_markup=admin_prods_kb(prods))
 
@@ -247,7 +253,6 @@ async def admin_add_plan_title(m: Message, state: FSMContext):
     await state.set_state(PlanStates.adding_price)
     await m.answer("قیمت پلن (تومان) را ارسال کنید (فقط عدد).")
 
-
 @router.message(PlanStates.adding_price, F.text)
 async def admin_add_plan_price(m: Message, state: FSMContext):
     price_text = (m.text or "").replace(",", "").strip()
@@ -283,7 +288,6 @@ async def plan_edit_title(m: Message, state: FSMContext):
     await state.set_state(PlanEditStates.editing_price)
     await m.answer("💰 قیمت جدید (تومان) را ارسال کنید (فقط عدد).")
 
-
 @router.callback_query(F.data.startswith("admin:edit_plan_price:"))
 async def admin_edit_plan_price_start(cb: CallbackQuery, state: FSMContext):
     if not await guard_admin(cb):
@@ -292,7 +296,6 @@ async def admin_edit_plan_price_start(cb: CallbackQuery, state: FSMContext):
     await state.update_data(edit_plan_id=plid)
     await state.set_state(PlanEditStates.editing_price)
     await cb.message.answer("💰 قیمت جدید (تومان) را ارسال کنید (فقط عدد).")
-
 
 @router.message(PlanEditStates.editing_price, F.text)
 async def plan_edit_price(m: Message, state: FSMContext):
@@ -305,7 +308,6 @@ async def plan_edit_price(m: Message, state: FSMContext):
     plid = int(data.get("edit_plan_id"))
     await execute("UPDATE plans SET price=? WHERE id=?", price, plid)
     await state.clear()
-    # پیدا کردن محصول برای بازسازی لیست
     row = await fetchone("SELECT product_id FROM plans WHERE id=?", plid)
     pid = int(row["product_id"]) if row else 0
     plans = await fetchall("SELECT id, title, price FROM plans WHERE product_id=? ORDER BY price ASC", pid)
@@ -344,9 +346,12 @@ async def admin_order_view(cb: CallbackQuery):
            JOIN plans p ON p.id=o.plan_id
            JOIN products pr ON pr.id=o.product_id
            JOIN users u ON u.id=o.user_id
-           WHERE o.id=?""", oid)
+           WHERE o.id=?""",
+        oid
+    )
     if not row:
-        await cb.answer("سفارش یافت نشد.", show_alert=True); return
+        await cb.answer("سفارش یافت نشد.", show_alert=True)
+        return
     txt = f"""سفارش #{row['id']}
 کد پیگیری: {row['tracking_code'] or '—'}
 کاربر: @{row['user_un'] or '-'}
@@ -374,11 +379,12 @@ async def admin_order_processing(cb: CallbackQuery):
     if row and row["tg_id"]:
         try:
             msg = await cb.bot.send_message(row["tg_id"], f"🔧 سفارش شما با کد پیگیری {trk} در حال انجام است.")
-            await cb.bot.set_message_reaction(chat_id=msg.chat.id, message_id=msg.message_id, reaction=[ReactionTypeEmoji(emoji="🔧")], is_big=True)
+            if ReactionTypeEmoji:
+                await cb.bot.set_message_reaction(chat_id=msg.chat.id, message_id=msg.message_id,
+                                                  reaction=[ReactionTypeEmoji(emoji="🔧")], is_big=True)
         except Exception:
             pass
     await cb.answer("🔧 به حالت در حال انجام تغییر کرد")
-
 
 @router.callback_query(F.data.startswith("admin:order_complete:"))
 async def admin_order_complete(cb: CallbackQuery):
@@ -393,11 +399,12 @@ async def admin_order_complete(cb: CallbackQuery):
     if row and row["tg_id"]:
         try:
             msg = await cb.bot.send_message(row["tg_id"], f"🎉 سفارش شما با کد پیگیری {trk} انجام شد.")
-            await cb.bot.set_message_reaction(chat_id=msg.chat.id, message_id=msg.message_id, reaction=[ReactionTypeEmoji(emoji="🎉")], is_big=True)
+            if ReactionTypeEmoji:
+                await cb.bot.set_message_reaction(chat_id=msg.chat.id, message_id=msg.message_id,
+                                                  reaction=[ReactionTypeEmoji(emoji="🎉")], is_big=True)
         except Exception:
             pass
     await cb.answer("✅ اتمام کار ثبت شد")
-
 
 @router.callback_query(F.data.startswith("admin:order_reject:"))
 async def admin_order_reject(cb: CallbackQuery):
@@ -412,11 +419,12 @@ async def admin_order_reject(cb: CallbackQuery):
     if row and row["tg_id"]:
         try:
             msg = await cb.bot.send_message(row["tg_id"], f"❌ سفارش شما با کد پیگیری {trk} رد شد. لطفاً با پشتیبانی در ارتباط باشید.")
-            await cb.bot.set_message_reaction(chat_id=msg.chat.id, message_id=msg.message_id, reaction=[ReactionTypeEmoji(emoji="👎")], is_big=True)
+            if ReactionTypeEmoji:
+                await cb.bot.set_message_reaction(chat_id=msg.chat.id, message_id=msg.message_id,
+                                                  reaction=[ReactionTypeEmoji(emoji="👎")], is_big=True)
         except Exception:
             pass
     await cb.answer("❌ سفارش رد شد")
-
 
 # ---------- Find by tracking ----------
 @router.callback_query(F.data == "admin:find_by_trk")
@@ -435,9 +443,12 @@ async def admin_find_by_trk_recv(m: Message, state: FSMContext):
            FROM orders o
            JOIN plans p ON p.id=o.plan_id
            JOIN products pr ON pr.id=o.product_id
-           WHERE o.tracking_code=?""", code)
+           WHERE o.tracking_code=?""",
+        code
+    )
     if not row:
-        await m.answer("یافت نشد. مطمئنید کد پیگیری درست است؟", reply_markup=admin_menu_kb()); return
+        await m.answer("یافت نشد. مطمئنید کد پیگیری درست است؟", reply_markup=admin_menu_kb())
+        return
     txt = f"""سفارش #{row['id']}
 کد پیگیری: {row['tracking_code']}
 محصول: {row['product_title']}

@@ -12,20 +12,25 @@ def _build_urls(main_ch: str | None, sup: str | None):
     channel_url = None
     support_url = None
     if main_ch:
-        main_ch = main_ch.strip()
-        if main_ch.startswith("http"): channel_url = main_ch
-        elif main_ch.startswith("@"): channel_url = f"https://t.me/{main_ch[1:]}"
-        elif main_ch.startswith("-100") or main_ch.lstrip("-").isdigit(): channel_url = None  # cannot build URL for private id
+        s = main_ch.strip()
+        if s.startswith("http"):
+            channel_url = s
+        elif s.startswith("@"):
+            channel_url = f"https://t.me/{s[1:]}"
+        elif s.startswith("-100") or s.lstrip("-").isdigit():
+            channel_url = None  # آی‌دی خصوصی؛ لینک‌پذیر نیست
     if sup:
-        sup = sup.strip()
-        if not sup.startswith("@"): sup = "@" + sup
-        support_url = f"https://t.me/{sup[1:]}"
+        s = sup.strip()
+        if not s.startswith("@"):
+            s = "@" + s
+        support_url = f"https://t.me/{s[1:]}"
     return channel_url, support_url
 
 # /start
 @router.message(F.text == "/start")
 async def start_cmd(m: Message):
     await upsert_user(m.from_user.id, m.from_user.first_name or "", m.from_user.username or "", 0)
+
     from app.config import settings
     admins = set(map(int, (settings.admins or "").split(","))) if isinstance(settings.admins, str) else set(settings.admins or [])
     is_admin = m.from_user.id in admins
@@ -71,18 +76,25 @@ async def shop_menu(cb: CallbackQuery):
 @router.callback_query(F.data.startswith("product:"))
 async def shop_product(cb: CallbackQuery):
     pid = int(cb.data.split(":")[1])
-    # توضیح محصول را از settings می‌خوانیم تا نیاز به تغییر اسکیمای DB نباشد
+
+    # عنوان و توضیح محصول
+    prod = await fetchone("SELECT title FROM products WHERE id=?", pid)
+    prod_title = prod["title"] if prod else f"#{pid}"
     desc = await get_setting(f"PROD_DESC_{pid}", None)
+
     plans = await fetchall("SELECT id, title, price FROM plans WHERE product_id=? ORDER BY price ASC", pid)
-    base = f"🧾 محصول انتخابی:\nعنوان: [#{pid}]\n"
+
+    base = f"🧾 محصول: {prod_title}"
     if desc:
-        base += f"\n{desc}"    
+        base += f"\n\n{desc}"
+
     if not plans:
         try:
             await cb.message.edit_text(base + "\n\nبرای این محصول پلنی تعریف نشده.", reply_markup=back_home_kb())
         except TelegramBadRequest:
             await cb.message.answer(base + "\n\nبرای این محصول پلنی تعریف نشده.", reply_markup=back_home_kb())
         return
+
     try:
         await cb.message.edit_text(base + "\n\n💠 پلن‌های موجود:", reply_markup=shop_plans_kb(plans, pid))
     except TelegramBadRequest:
@@ -92,11 +104,13 @@ async def shop_product(cb: CallbackQuery):
 async def shop_plan(cb: CallbackQuery):
     plid = int(cb.data.split(":")[1])
     row = await fetchone(
-        "SELECT p.title as plan_title, p.price, pr.title as product_title FROM plans p JOIN products pr ON pr.id=p.product_id WHERE p.id=?",
+        "SELECT p.title as plan_title, p.price, pr.title as product_title "
+        "FROM plans p JOIN products pr ON pr.id=p.product_id WHERE p.id=?",
         plid,
     )
     if not row:
-        await cb.answer("پلن یافت نشد.", show_alert=True); return
+        await cb.answer("پلن یافت نشد.", show_alert=True)
+        return
     txt = f"""🧾 جزئیات پلن:
 محصول: {row['product_title']}
 عنوان پلن: {row['plan_title']}

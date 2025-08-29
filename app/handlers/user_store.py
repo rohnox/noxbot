@@ -1,11 +1,17 @@
 # -*- coding: utf-8 -*-
 from aiogram import Router, F
-from aiogram.types import CallbackQuery, Message, ReactionTypeEmoji
+from aiogram.types import CallbackQuery, Message
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import StatesGroup, State
 
+# ری‌اکشن‌ها (fallback اگر در aiogram موجود نباشد)
+try:
+    from aiogram.types import ReactionTypeEmoji
+except Exception:
+    ReactionTypeEmoji = None
+
 from app.db import fetchone, fetchall, execute, get_setting
-from app.keyboards import pay_kb, proof_kb
+from app.keyboards import proof_kb
 
 router = Router()
 
@@ -20,21 +26,22 @@ async def _get_or_create_user_id(tg_user) -> int:
     row = await fetchone("SELECT id FROM users WHERE tg_id=?", tg_user.id)
     if row:
         return int(row["id"]) if isinstance(row, dict) else int(row[0])
-    uid = await execute("INSERT INTO users(tg_id, first_name, username) VALUES(?,?,?)",
-                        tg_user.id, tg_user.first_name or "", tg_user.username or "")
+    uid = await execute(
+        "INSERT INTO users(tg_id, first_name, username) VALUES(?,?,?)",
+        tg_user.id, tg_user.first_name or "", tg_user.username or ""
+    )
     return uid
 
 def _normalize_chat_id(chat: str | None) -> str | None:
-    if not chat: return None
+    if not chat:
+        return None
     s = chat.strip()
     if s.startswith("https://t.me/"):
         uname = s.split("/")[-1]
-        if uname: s = "@" + uname
-    if s.endswith("@") and not s.startswith("@"):
-        s = "@" + s[:-1]
-    if (not s.startswith("@")) and (not s.lstrip("-").isdigit()):
-        s = "@" + s
-    return s
+        s = "@" + uname
+    if s.startswith("@") or s.lstrip("-").isdigit():
+        return s
+    return "@" + s
 
 async def _notify_new_order(bot, order_id: int):
     row = await fetchone(
@@ -44,8 +51,12 @@ async def _notify_new_order(bot, order_id: int):
            JOIN plans p ON p.id=o.plan_id
            JOIN products pr ON pr.id=p.product_id
            JOIN users u ON u.id=o.user_id
-           WHERE o.id=?""", order_id)
-    if not row: return False
+           WHERE o.id=?""",
+        order_id
+    )
+    if not row:
+        return False
+
     dest_raw = await get_setting("ORDER_CHANNEL", None)
     dest = _normalize_chat_id(dest_raw)
 
@@ -65,7 +76,7 @@ async def _notify_new_order(bot, order_id: int):
         except Exception:
             ok = False
 
-    # نوتیف مستقیم به ادمین‌ها
+    # نوتیف دایرکت برای ادمین‌ها
     try:
         from app.config import settings
         admins = set(map(int, (settings.admins or "").split(","))) if isinstance(settings.admins, str) else set(settings.admins or [])
@@ -85,16 +96,21 @@ async def pay_cb(c: CallbackQuery, state: FSMContext):
     plan = await fetchone(
         """SELECT p.id as plan_id, p.title as plan_title, p.price,
                   pr.title as product_title, pr.id as product_id
-           FROM plans p JOIN products pr ON pr.id=p.product_id WHERE p.id=?""", plan_id)
+           FROM plans p JOIN products pr ON pr.id=p.product_id WHERE p.id=?""",
+        plan_id
+    )
     if not plan:
-        await c.answer("نامعتبر", show_alert=True); return
+        await c.answer("نامعتبر", show_alert=True)
+        return
 
     user_id = await _get_or_create_user_id(c.from_user)
     trk = _gen_tracking()
-    order_id = await execute("INSERT INTO orders(user_id, product_id, plan_id, status, tracking_code) VALUES(?,?,?,?,?)",
-                             user_id, plan["product_id"], plan_id, "awaiting_proof", trk)
+    order_id = await execute(
+        "INSERT INTO orders(user_id, product_id, plan_id, status, tracking_code) VALUES(?,?,?,?,?)",
+        user_id, plan["product_id"], plan_id, "awaiting_proof", trk
+    )
 
-    # اطلاع به کانال و ادمین‌ها
+    # اطلاع کانال/ادمین‌ها
     await _notify_new_order(c.bot, order_id)
 
     # کارت
@@ -106,17 +122,20 @@ async def pay_cb(c: CallbackQuery, state: FSMContext):
 شماره کارت: {card}"""
 
     sent = await c.message.edit_text(info, reply_markup=proof_kb(order_id), parse_mode="HTML")
-    # ری‌اکشن قلب ❤️
-    try:
-        await c.bot.set_message_reaction(chat_id=sent.chat.id, message_id=sent.message_id,
-                                         reaction=[ReactionTypeEmoji(emoji="❤️")], is_big=True)
-    except Exception:
-        pass
+
+    # ری‌اکشن قلب ❤️ روی پیام
+    if ReactionTypeEmoji:
+        try:
+            await c.bot.set_message_reaction(
+                chat_id=sent.chat.id,
+                message_id=sent.message_id,
+                reaction=[ReactionTypeEmoji(emoji="❤️")],
+                is_big=True
+            )
+        except Exception:
+            pass
 
 # === Proof (رسید پرداخت) ===
-class ProofStates(StatesGroup):
-    waiting = State()
-
 @router.callback_query(F.data.regexp(r"^proof:(\d+)$"))
 async def proof_start(c: CallbackQuery, state: FSMContext):
     order_id = int(c.data.split(":")[1])
@@ -134,11 +153,16 @@ async def proof_photo(m: Message, state: FSMContext):
     await _send_proof_to_channel(m, order_id, "photo", file_id)
     await state.clear()
     sent = await m.answer("✅ رسید شما دریافت شد. پس از بررسی به شما اطلاع می‌دهیم.")
-    try:
-        await m.bot.set_message_reaction(chat_id=sent.chat.id, message_id=sent.message_id,
-                                         reaction=[ReactionTypeEmoji(emoji="✅")], is_big=True)
-    except Exception:
-        pass
+    if ReactionTypeEmoji:
+        try:
+            await m.bot.set_message_reaction(
+                chat_id=sent.chat.id,
+                message_id=sent.message_id,
+                reaction=[ReactionTypeEmoji(emoji="✅")],
+                is_big=True
+            )
+        except Exception:
+            pass
 
 @router.message(ProofStates.waiting, F.document)
 async def proof_document(m: Message, state: FSMContext):
@@ -150,11 +174,16 @@ async def proof_document(m: Message, state: FSMContext):
     await _send_proof_to_channel(m, order_id, "document", file_id)
     await state.clear()
     sent = await m.answer("✅ رسید شما دریافت شد. پس از بررسی به شما اطلاع می‌دهیم.")
-    try:
-        await m.bot.set_message_reaction(chat_id=sent.chat.id, message_id=sent.message_id,
-                                         reaction=[ReactionTypeEmoji(emoji="✅")], is_big=True)
-    except Exception:
-        pass
+    if ReactionTypeEmoji:
+        try:
+            await m.bot.set_message_reaction(
+                chat_id=sent.chat.id,
+                message_id=sent.message_id,
+                reaction=[ReactionTypeEmoji(emoji="✅")],
+                is_big=True
+            )
+        except Exception:
+            pass
 
 @router.message(ProofStates.waiting)
 async def proof_wrong(m: Message, state: FSMContext):
@@ -172,7 +201,9 @@ async def _send_proof_to_channel(m: Message, order_id: int, kind: str, file_id: 
            JOIN plans p ON p.id=o.plan_id
            JOIN products pr ON pr.id=p.product_id
            JOIN users u ON u.id=o.user_id
-           WHERE o.id=?""", order_id)
+           WHERE o.id=?""",
+        order_id
+    )
     if not row:
         return
     caption = f"""🧾 رسید پرداخت برای سفارش #{row['id']}
