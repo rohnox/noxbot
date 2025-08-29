@@ -1,5 +1,3 @@
-
-# NOTE: use ORDER_CHANNEL from env/config for any order channel notifications.
 # -*- coding: utf-8 -*-
 from aiogram import Bot
 from aiogram.exceptions import TelegramBadRequest

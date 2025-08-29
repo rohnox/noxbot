@@ -1,8 +1,5 @@
 # -*- coding: utf-8 -*-
 from aiogram import Router, F
-
-import os
-from app.utils.effects import send_with_effect
 from aiogram.types import Message, CallbackQuery
 from aiogram.exceptions import TelegramBadRequest
 
@@ -23,16 +20,6 @@ from app.keyboards import main_menu, back_home_kb, shop_products_kb, shop_plans_
 # /start
 @router.message(F.text == "/start")
 async def start_cmd(m: Message):
-
-    welcome = os.getenv('WELCOME_TEXT')
-    if welcome:
-        try:
-            await send_with_effect(bot, message.chat.id, welcome, parse_mode='HTML')
-        except Exception:
-            try:
-                await bot.send_message(message.chat.id, welcome, parse_mode='HTML')
-            except Exception:
-                pass
     await upsert_user(m.from_user.id, m.from_user.first_name or "", m.from_user.username or "", 0)
 
     from app.config import settings

@@ -1,8 +1,7 @@
 # -*- coding: utf-8 -*-
 from aiogram import Router, F
-
-from app.utils.effects import send_with_effect, edit_with_effect
 from aiogram.types import CallbackQuery, Message
+from app.utils.reactions import react_emoji
 from aiogram.fsm.state import StatesGroup, State
 from aiogram.fsm.context import FSMContext
 from aiogram.exceptions import TelegramBadRequest
@@ -399,7 +398,11 @@ async def admin_order_complete(cb: CallbackQuery):
     if row and row["tg_id"]:
         try:
             await cb.bot.send_message(row["tg_id"], "🎉")
-            await cb.bot.send_message(row["tg_id"], f"🎉 سفارش شما با کد پیگیری {trk} انجام شد.")
+            __msg = await cb.bot.send_message(row["tg_id"], f"🎉 سفارش شما با کد پیگیری {trk} انجام شد.")
+        try:
+            await react_emoji(cb.bot, __msg.chat.id, __msg.message_id, "🎉", big=True)
+        except Exception:
+            pass
         except Exception:
             pass
     await cb.answer("✅ اتمام کار ثبت شد")
@@ -416,7 +419,11 @@ async def admin_order_reject(cb: CallbackQuery):
         await execute("UPDATE orders SET tracking_code=? WHERE id=?", trk, oid)
     if row and row["tg_id"]:
         try:
-            await cb.bot.send_message(row["tg_id"], f"❌ سفارش شما با کد پیگیری {trk} رد شد. لطفاً با پشتیبانی در ارتباط باشید.")
+            __msg = await cb.bot.send_message(row["tg_id"], f"❌ سفارش شما با کد پیگیری {trk} رد شد. لطفاً با پشتیبانی در ارتباط باشید.")
+        try:
+            await react_emoji(cb.bot, __msg.chat.id, __msg.message_id, "👎", big=True)
+        except Exception:
+            pass
         except Exception:
             pass
     await cb.answer("❌ سفارش رد شد")
