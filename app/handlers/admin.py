@@ -39,7 +39,6 @@ async def guard_admin(cb: CallbackQuery) -> bool:
 # ---------- States ----------
 class ProdStates(StatesGroup):
     adding_title = State()
-    adding_desc = State()
     editing_title = State()
 
 class PlanStates(StatesGroup):
@@ -179,8 +178,7 @@ async def admin_add_prod_title(m: Message, state: FSMContext):
         return
     await state.update_data(prod_title=title)
     await state.set_state(ProdStates.adding_desc)
-    await m.answer("📝 توضیح محصول را ارسال کنید (اختیاری). برای رد شدن، یک خط تیره '-' بفرستید.")(prods))
-
+    await m.answer("📝 توضیح محصول را ارسال کنید (اختیاری). برای رد شدن، یک خط تیره '-' بفرستید.")
 @router.callback_query(F.data.startswith("admin:edit_prod:"))
 async def admin_edit_prod(cb: CallbackQuery, state: FSMContext):
     if not await guard_admin(cb):

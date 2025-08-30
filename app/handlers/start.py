@@ -24,19 +24,8 @@ async def start_cmd(m: Message):
     await upsert_user(m.from_user.id, m.from_user.first_name or "", m.from_user.username or "", 0)
 
     # admin flag
-    from app.config import settings
-    try:
-        from app.config import is_admin as _is_admin
-        is_admin_flag = _is_admin(m.from_user.id)
-    except Exception:
-        admins = settings.admins
-        if isinstance(admins, str):
-            admins = [a.strip() for a in admins.split(",") if a.strip()]
-        try:
-            admins = set(map(int, admins))
-        except Exception:
-            admins = set()
-        is_admin_flag = m.from_user.id in admins
+    from app.config import settings, is_admin
+    is_admin_flag = is_admin(m.from_user.id)
 
     # links
     main_ch = await get_setting("MAIN_CHANNEL", None)
@@ -46,7 +35,7 @@ async def start_cmd(m: Message):
     support_url = f"https://t.me/{sup[1:]}" if sup else None
     channel_url = main_ch if (main_ch and main_ch.startswith("http")) else (f"https://t.me/{main_ch[1:]}" if (main_ch and main_ch.startswith("@")) else main_ch)
 
-    # welcome text
+    # welcome above menu
     welcome = await get_setting("WELCOME_TEXT", None)
     if not welcome:
         try:
@@ -60,7 +49,6 @@ async def start_cmd(m: Message):
             await m.answer(welcome)
 
     await m.answer("منوی اصلی:", reply_markup=main_menu(is_admin_flag, channel_url, support_url))
-
 @router.callback_query(F.data == "home")
 async def go_home(cb: CallbackQuery):
     from app.config import settings
@@ -115,7 +103,7 @@ async def shop_product(cb: CallbackQuery):
 async def shop_plan(cb: CallbackQuery):
     plid = int(cb.data.split(":")[1])
     row = await fetchone(
-        "SELECT p.title as plan_title, p.price, pr.title as product_title, pr.description as product_description "
+        "SELECT p.title as plan_title, p.price, p.description, pr.title as product_title "
         "FROM plans p JOIN products pr ON pr.id=p.product_id WHERE p.id=?",
         plid,
     )
@@ -127,7 +115,7 @@ async def shop_plan(cb: CallbackQuery):
 عنوان: {row['plan_title']}
 قیمت: {row['price']:,} تومان
 —
-{row.get('product_description') or ''}"""
+{row['description']}"""
     try:
         await cb.message.edit_text(txt, reply_markup=pay_kb(plid))
     except TelegramBadRequest:

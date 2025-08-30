@@ -5,8 +5,7 @@ from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import StatesGroup, State
 
 from app.db import fetchone, fetchall, execute, get_setting
-from app.config import is_admin
-from app.keyboards import pay_kb, proof_kb, proofnew_kb, main_menu
+from app.keyboards import pay_kb, proof_kb
 
 router = Router()
 
@@ -105,7 +104,6 @@ async def pay_cb(c: CallbackQuery, state: FSMContext):
         await c.message.edit_text(info, reply_markup=proofnew_kb(plan['plan_id']), parse_mode="HTML")
     except Exception:
         await c.message.answer(info, reply_markup=proofnew_kb(plan['plan_id']), parse_mode="HTML")
-
 @router.callback_query(F.data.regexp(r"^proof:(\d+)$"))
 async def proof_start(c: CallbackQuery, state: FSMContext):
     order_id = int(c.data.split(":")[1])
@@ -116,54 +114,24 @@ async def proof_start(c: CallbackQuery, state: FSMContext):
 @router.message(ProofStates.waiting, F.photo)
 async def proof_photo(m: Message, state: FSMContext):
     data = await state.get_data()
-    plan_id = data.get("plan_id")
-    product_id = data.get("product_id")
+    order_id = int(data.get("order_id"))
     file_id = m.photo[-1].file_id
-
-    if plan_id and product_id:
-        user_id = await _get_or_create_user_id(m.from_user)
-        trk = _gen_tracking()
-        order_id = await execute(
-            "INSERT INTO orders(user_id, product_id, plan_id, status, proof_type, proof_value, tracking_code) VALUES(?,?,?,?,?,?,?)",
-            user_id, int(product_id), int(plan_id), "awaiting_review", "photo", file_id, trk
-        )
-        await _send_proof_to_channel(m, order_id, "photo", file_id)
-        await state.clear()
-    else:
-        order_id = int(data.get("order_id"))
-        await execute("UPDATE orders SET proof_type=?, proof_value=?, status='awaiting_review' WHERE id=?", "photo", file_id, order_id)
-        await _send_proof_to_channel(m, order_id, "photo", file_id)
-        await state.clear()
-
+    await execute("UPDATE orders SET proof_type=?, proof_value=?, status='awaiting_review' WHERE id=?",
+                  "photo", file_id, order_id)
+    await _send_proof_to_channel(m, order_id, "photo", file_id)
+    await state.clear()
     await m.answer("✅ رسید شما دریافت شد. پس از بررسی به شما اطلاع می‌دهیم.")
-    kb = main_menu(is_admin(m.from_user.id))
-    await m.answer("منوی اصلی:", reply_markup=kb)
 
 @router.message(ProofStates.waiting, F.document)
 async def proof_document(m: Message, state: FSMContext):
     data = await state.get_data()
-    plan_id = data.get("plan_id")
-    product_id = data.get("product_id")
+    order_id = int(data.get("order_id"))
     file_id = m.document.file_id
-
-    if plan_id and product_id:
-        user_id = await _get_or_create_user_id(m.from_user)
-        trk = _gen_tracking()
-        order_id = await execute(
-            "INSERT INTO orders(user_id, product_id, plan_id, status, proof_type, proof_value, tracking_code) VALUES(?,?,?,?,?,?,?)",
-            user_id, int(product_id), int(plan_id), "awaiting_review", "document", file_id, trk
-        )
-        await _send_proof_to_channel(m, order_id, "document", file_id)
-        await state.clear()
-    else:
-        order_id = int(data.get("order_id"))
-        await execute("UPDATE orders SET proof_type=?, proof_value=?, status='awaiting_review' WHERE id=?", "document", file_id, order_id)
-        await _send_proof_to_channel(m, order_id, "document", file_id)
-        await state.clear()
-
+    await execute("UPDATE orders SET proof_type=?, proof_value=?, status='awaiting_review' WHERE id=?",
+                  "document", file_id, order_id)
+    await _send_proof_to_channel(m, order_id, "document", file_id)
+    await state.clear()
     await m.answer("✅ رسید شما دریافت شد. پس از بررسی به شما اطلاع می‌دهیم.")
-    kb = main_menu(is_admin(m.from_user.id))
-    await m.answer("منوی اصلی:", reply_markup=kb)
 
 @router.message(ProofStates.waiting)
 async def proof_wrong(m: Message, state: FSMContext):
@@ -202,14 +170,3 @@ async def _send_proof_to_channel(m: Message, order_id: int, kind: str, file_id: 
     except Exception:
         pass
 
-
-@router.callback_query(F.data.regexp(r"^proofnew:(\d+)$"))
-async def proof_new(c: CallbackQuery, state: FSMContext):
-    plan_id = int(c.data.split(":")[1])
-    plan = await fetchone("SELECT id as plan_id, product_id FROM plans WHERE id=?", plan_id)
-    if not plan:
-        await c.answer("پلن نامعتبر است.", show_alert=True); 
-        return
-    await state.set_state(ProofStates.waiting)
-    await state.update_data(plan_id=plan['plan_id'], product_id=plan['product_id'])
-    await c.message.answer("🧾 رسید پرداخت را به‌صورت عکس یا فایل بفرستید.")
