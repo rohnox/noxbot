@@ -5,7 +5,8 @@ from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import StatesGroup, State
 
 from app.db import fetchone, fetchall, execute, get_setting
-from app.keyboards import pay_kb, proof_kb
+from app.config import is_admin
+from app.keyboards import pay_kb, proof_kb, proofnew_kb, main_menu
 
 router = Router()
 
@@ -135,7 +136,6 @@ async def proof_photo(m: Message, state: FSMContext):
         await state.clear()
 
     await m.answer("✅ رسید شما دریافت شد. پس از بررسی به شما اطلاع می‌دهیم.")
-    # نمایش منوی اصلی
     kb = main_menu(is_admin(m.from_user.id))
     await m.answer("منوی اصلی:", reply_markup=kb)
 
@@ -162,7 +162,6 @@ async def proof_document(m: Message, state: FSMContext):
         await state.clear()
 
     await m.answer("✅ رسید شما دریافت شد. پس از بررسی به شما اطلاع می‌دهیم.")
-    # نمایش منوی اصلی
     kb = main_menu(is_admin(m.from_user.id))
     await m.answer("منوی اصلی:", reply_markup=kb)
 

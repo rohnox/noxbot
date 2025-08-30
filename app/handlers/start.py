@@ -20,10 +20,10 @@ from app.keyboards import main_menu, back_home_kb, shop_products_kb, shop_plans_
 # /start
 @router.message(F.text == "/start")
 async def start_cmd(m: Message):
-    # ثبت/به‌روز کاربر
+    # upsert user
     await upsert_user(m.from_user.id, m.from_user.first_name or "", m.from_user.username or "", 0)
 
-    # محاسبه نقش ادمین
+    # admin flag
     from app.config import settings
     try:
         from app.config import is_admin as _is_admin
@@ -38,7 +38,7 @@ async def start_cmd(m: Message):
             admins = set()
         is_admin_flag = m.from_user.id in admins
 
-    # لینک‌ها
+    # links
     main_ch = await get_setting("MAIN_CHANNEL", None)
     sup = await get_setting("SUPPORT_USERNAME", None)
     if sup and not sup.startswith("@"):
@@ -46,7 +46,7 @@ async def start_cmd(m: Message):
     support_url = f"https://t.me/{sup[1:]}" if sup else None
     channel_url = main_ch if (main_ch and main_ch.startswith("http")) else (f"https://t.me/{main_ch[1:]}" if (main_ch and main_ch.startswith("@")) else main_ch)
 
-    # متن خوش‌آمد بالای منو
+    # welcome text
     welcome = await get_setting("WELCOME_TEXT", None)
     if not welcome:
         try:
