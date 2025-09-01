@@ -1,4 +1,5 @@
 import asyncio
+from aiogram.client.default import DefaultBotProperties
 from aiogram import Bot, Dispatcher
 from bot.handlers import start, catalog, cart_checkout, orders, support
 from common.settings import Settings
@@ -6,7 +7,7 @@ from common.settings import Settings
 settings = Settings()
 
 async def main():
-    bot = Bot(token=settings.BOT_TOKEN, parse_mode='HTML')
+    bot = Bot(token=settings.BOT_TOKEN, default=DefaultBotProperties(parse_mode='HTML'))
     dp = Dispatcher()
     dp.include_router(start)
     dp.include_router(catalog)
