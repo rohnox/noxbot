@@ -1,0 +1,39 @@
+{% extends 'base.html' %}
+{% block content %}
+<h2 class="text-lg font-bold mb-4">سفارش‌ها</h2>
+<table class="w-full bg-white rounded-2xl overflow-hidden shadow text-right">
+  <thead class="bg-slate-100">
+    <tr>
+      <th class="p-3">#</th>
+      <th class="p-3">کاربر</th>
+      <th class="p-3">محصول</th>
+      <th class="p-3">مبلغ</th>
+      <th class="p-3">وضعیت</th>
+      <th class="p-3">عملیات</th>
+    </tr>
+  </thead>
+  <tbody>
+  {% for o in orders %}
+    <tr class="border-t">
+      <td class="p-3">{{ o.id }}</td>
+      <td class="p-3">{{ o.user_tg_id }}</td>
+      <td class="p-3">{{ o.product_id }}</td>
+      <td class="p-3">{{ o.amount }} {{ o.currency }}</td>
+      <td class="p-3">{{ o.status }}</td>
+      <td class="p-3">
+        <form method="post" action="/orders/{{ o.id }}/status" class="flex gap-2">
+          <select name="status" class="border rounded px-2 py-1">
+            <option>pending_payment</option>
+            <option>paid</option>
+            <option>in_progress</option>
+            <option>done</option>
+            <option>canceled</option>
+          </select>
+          <button class="px-3 py-1 bg-blue-600 text-white rounded">ثبت</button>
+        </form>
+      </td>
+    </tr>
+  {% endfor %}
+  </tbody>
+</table>
+{% endblock %}

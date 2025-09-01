@@ -1,0 +1,17 @@
+{% extends 'base.html' %}
+{% block content %}
+<div class="grid md:grid-cols-3 gap-4">
+  <div class="bg-white rounded-2xl p-6 shadow">
+    <div class="text-sm text-slate-500">سفارش‌ها</div>
+    <div class="text-3xl font-extrabold">{{ orders_count }}</div>
+  </div>
+  <div class="bg-white rounded-2xl p-6 shadow">
+    <div class="text-sm text-slate-500">محصولات</div>
+    <div class="text-3xl font-extrabold">{{ products_count }}</div>
+  </div>
+  <div class="bg-white rounded-2xl p-6 shadow">
+    <div class="text-sm text-slate-500">وضعیت سیستم</div>
+    <div class="text-lg">سالم ✅</div>
+  </div>
+</div>
+{% endblock %}

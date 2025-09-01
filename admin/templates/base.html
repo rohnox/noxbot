@@ -1,0 +1,23 @@
+<!doctype html>
+<html lang="fa" dir="rtl">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <script src="https://cdn.tailwindcss.com"></script>
+  <title>{{ title or 'پنل مدیریت' }}</title>
+</head>
+<body class="bg-slate-50 text-slate-800">
+  <header class="bg-white shadow p-4 mb-6">
+    <div class="container mx-auto flex items-center justify-between">
+      <h1 class="text-xl font-bold">پنل مدیریت</h1>
+      <nav class="space-x-4 space-x-reverse">
+        <a class="px-3 py-2 rounded hover:bg-slate-100" href="/">داشبورد</a>
+        <a class="px-3 py-2 rounded hover:bg-slate-100" href="/orders">سفارش‌ها</a>
+      </nav>
+    </div>
+  </header>
+  <main class="container mx-auto px-4">
+    {% block content %}{% endblock %}
+  </main>
+</body>
+</html>
