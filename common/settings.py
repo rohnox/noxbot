@@ -7,13 +7,16 @@ try:
     ALIAS_PASSWORD = AliasChoices("ADMIN_PASSWORD", "admin_password")
     ALIAS_GATE_TOKEN = AliasChoices("ADMIN_GATE_TOKEN", "admin_gate_token")
     ALIAS_GATE_PARAM = AliasChoices("ADMIN_GATE_PARAM", "admin_gate_param")
+    ALIAS_DASHBOARD_PATH = AliasChoices("DASHBOARD_PATH", "dashboard_path")
 except Exception:
     ALIAS_USERNAME = "ADMIN_USERNAME"
     ALIAS_PASSWORD = "ADMIN_PASSWORD"
     ALIAS_GATE_TOKEN = "ADMIN_GATE_TOKEN"
     ALIAS_GATE_PARAM = "ADMIN_GATE_PARAM"
+    ALIAS_DASHBOARD_PATH = "DASHBOARD_PATH"
 
 class Settings(BaseSettings):
+    model_config = SettingsConfigDict(env_file=".env", case_sensitive=False, extra="ignore")
     model_config = SettingsConfigDict(
         env_file=".env",
         case_sensitive=False,
@@ -39,3 +42,4 @@ class Settings(BaseSettings):
     TZ: str = "Asia/Tehran"
     WEB_BASE_URL: str = "http://localhost:8080"
     BOT_WEBHOOK_SECRET: str = "change-me"
+    DASHBOARD_PATH: str = Field(default="/", validation_alias=ALIAS_DASHBOARD_PATH)
