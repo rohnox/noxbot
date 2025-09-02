@@ -3,7 +3,9 @@ from fastapi import FastAPI, Request, Form
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
-from starlette.middleware.sessions import SessionMiddleware  # ← مهم
+
+from starlette.middleware import Middleware
+from starlette.middleware.sessions import SessionMiddleware
 
 from common.db import SessionLocal
 from common.models import Order, Product
@@ -11,28 +13,31 @@ from common.settings import Settings
 
 settings = Settings()
 
-app = FastAPI()
+# 1) SessionMiddleware را موقع ساخت اپ اضافه کن تا قبل از میدل‌ویرهای تابعی اجرا شود
+middleware = [
+    Middleware(
+        SessionMiddleware,
+        secret_key=settings.ADMIN_SECRET,
+        same_site="lax",
+        https_only=False,     # اگر SSL داری True کن
+        max_age=60 * 60 * 8,  # 8h
+    )
+]
+app = FastAPI(middleware=middleware)
 
-# 1) اول SessionMiddleware را اضافه کن
-app.add_middleware(
-    SessionMiddleware,
-    secret_key=settings.ADMIN_SECRET,
-    same_site="lax",
-    https_only=False,     # اگر SSL داری، True کن
-    max_age=60 * 60 * 8,  # 8h
-)
-
-# 2) بعد mount و template loader
 app.mount('/static', StaticFiles(directory='admin/static'), name='static')
 templates = Jinja2Templates(directory='admin/templates')
 
-# 3) حالا میدل‌ویرِ auth که از request.session استفاده می‌کنه
+EXEMPT_PATHS = ("/login", "/static", "/favicon.ico")
+
+# 2) از scope برای دسترسی به سشن استفاده کن تا اگر هنوز نبود Assert نشود
 @app.middleware("http")
 async def auth_guard(request: Request, call_next):
     path = request.url.path
-    if path.startswith("/static") or path.startswith("/login"):
+    if path == "/" or any(path.startswith(p) for p in EXEMPT_PATHS):
         return await call_next(request)
-    if not request.session.get("auth", False):
+    session = request.scope.get("session")  # ممکن است None باشد اگر SessionMiddleware نرسیده باشد
+    if not (session and session.get("auth", False)):
         return RedirectResponse(url="/login", status_code=303)
     return await call_next(request)
 
@@ -43,6 +48,7 @@ async def login_form(request: Request):
 
 @app.post("/login", response_class=HTMLResponse)
 async def login(request: Request, username: str = Form(...), password: str = Form(...)):
+    # در اینجا SessionMiddleware تا این لحظه اجرا شده و request.session امن است
     if username == settings.ADMIN_USERNAME and password == settings.ADMIN_PASSWORD:
         request.session["auth"] = True
         return RedirectResponse(url="/", status_code=303)
