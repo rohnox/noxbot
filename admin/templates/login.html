@@ -5,7 +5,7 @@
   {% if error %}
     <div class="mb-3 text-red-600">{{ error }}</div>
   {% endif %}
-  <form method="post" action="/login" class="space-y-3">
+  <form method="post" action="{{ request.url_for('login') }}" class="space-y-3">
     <div>
       <label class="block text-sm mb-1">نام کاربری</label>
       <input name="username" class="w-full border rounded px-3 py-2" required />
