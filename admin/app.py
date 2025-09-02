@@ -1,8 +1,9 @@
+# admin/app.py
 from fastapi import FastAPI, Request, Form
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
-from starlette.middleware.sessions import SessionMiddleware
+from starlette.middleware.sessions import SessionMiddleware  # ← مهم
 
 from common.db import SessionLocal
 from common.models import Order, Product
@@ -12,19 +13,20 @@ settings = Settings()
 
 app = FastAPI()
 
-# سشن کوکی برای لاگین
+# 1) اول SessionMiddleware را اضافه کن
 app.add_middleware(
     SessionMiddleware,
     secret_key=settings.ADMIN_SECRET,
     same_site="lax",
-    https_only=False,  # اگر SSL داری می‌تونی True کنی
-    max_age=60 * 60 * 8,  # 8 ساعت
+    https_only=False,     # اگر SSL داری، True کن
+    max_age=60 * 60 * 8,  # 8h
 )
 
+# 2) بعد mount و template loader
 app.mount('/static', StaticFiles(directory='admin/static'), name='static')
 templates = Jinja2Templates(directory='admin/templates')
 
-# محافظت از همه مسیرها به جز /login و /static
+# 3) حالا میدل‌ویرِ auth که از request.session استفاده می‌کنه
 @app.middleware("http")
 async def auth_guard(request: Request, call_next):
     path = request.url.path
