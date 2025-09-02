@@ -41,7 +41,7 @@ set -euo pipefail
 # ============================================
 
 # ------------- Config -------------
-: "${APP_DIR:="$HOME/tele-premium-stars-bot"}"
+: "${APP_DIR:="$HOME/noxbot"}"
 : "${BRANCH:="main"}"
 : "${START_ON_INSTALL:="1"}"
 : "${WITH_NGINX:="0"}"
