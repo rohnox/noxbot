@@ -1,6 +1,6 @@
 # admin/app.py
 from fastapi import FastAPI, Request, Form
-from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi.responses import HTMLResponse, RedirectResponse, Response
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
@@ -13,42 +13,54 @@ from common.settings import Settings
 
 settings = Settings()
 
-# 1) SessionMiddleware را موقع ساخت اپ اضافه کن تا قبل از میدل‌ویرهای تابعی اجرا شود
+# SessionMiddleware را هنگام ساخت اپ اضافه می‌کنیم تا جلوتر از میدل‌ویرهای تابعی اجرا شود
 middleware = [
     Middleware(
         SessionMiddleware,
         secret_key=settings.ADMIN_SECRET,
         same_site="lax",
         https_only=False,     # اگر SSL داری True کن
-        max_age=60 * 60 * 8,  # 8h
+        max_age=60 * 60 * 8,  # 8 ساعت
     )
 ]
 app = FastAPI(middleware=middleware)
 
+# Static & Templates
 app.mount('/static', StaticFiles(directory='admin/static'), name='static')
 templates = Jinja2Templates(directory='admin/templates')
 
-EXEMPT_PATHS = ("/login", "/static", "/favicon.ico")
+EXEMPT_PREFIXES = ("/static",)
+EXEMPT_EXACT = ("/login", "/favicon.ico")
 
-# 2) از scope برای دسترسی به سشن استفاده کن تا اگر هنوز نبود Assert نشود
 @app.middleware("http")
 async def auth_guard(request: Request, call_next):
     path = request.url.path
-    if path == "/" or any(path.startswith(p) for p in EXEMPT_PATHS):
+    # اجازه فقط به مسیرهای معاف
+    if path in EXEMPT_EXACT or any(path.startswith(p) for p in EXEMPT_PREFIXES):
         return await call_next(request)
-    session = request.scope.get("session")  # ممکن است None باشد اگر SessionMiddleware نرسیده باشد
-    if not (session and session.get("auth", False)):
+
+    session = request.scope.get("session")  # ممکن است None باشد؛ اگر SessionMiddleware اعمال شده باشد dict است
+    authed = bool(session and session.get("auth"))
+    if not authed:
         return RedirectResponse(url="/login", status_code=303)
     return await call_next(request)
 
-# --- login/logout ---
+# --- favicon (اختیاری برای حذف ارور 500 روی /favicon.ico) ---
+@app.get("/favicon.ico")
+async def favicon():
+    return Response(status_code=204)
+
+# --- Login / Logout ---
 @app.get("/login", response_class=HTMLResponse)
 async def login_form(request: Request):
+    # اگر قبلاً لاگین است، بفرستش داشبورد
+    session = request.scope.get("session") or {}
+    if session.get("auth"):
+        return RedirectResponse(url="/", status_code=303)
     return templates.TemplateResponse("login.html", {"request": request, "error": None})
 
 @app.post("/login", response_class=HTMLResponse)
 async def login(request: Request, username: str = Form(...), password: str = Form(...)):
-    # در اینجا SessionMiddleware تا این لحظه اجرا شده و request.session امن است
     if username == settings.ADMIN_USERNAME and password == settings.ADMIN_PASSWORD:
         request.session["auth"] = True
         return RedirectResponse(url="/", status_code=303)
@@ -59,8 +71,8 @@ async def logout(request: Request):
     request.session.clear()
     return RedirectResponse(url="/login", status_code=303)
 
-# --- dashboard ---
-@app.get("/", response_class=HTMLResponse)
+# --- Dashboard ---
+@app.get("/", response_class=HTMLResponse, name="dashboard")
 async def dashboard(request: Request):
     with SessionLocal() as s:
         orders_count = s.query(Order).count()
@@ -71,8 +83,8 @@ async def dashboard(request: Request):
         'products_count': products_count
     })
 
-# --- orders ---
-@app.get('/orders', response_class=HTMLResponse)
+# --- Orders ---
+@app.get('/orders', response_class=HTMLResponse, name="orders_list")
 async def orders_list(request: Request):
     with SessionLocal() as s:
         orders = s.query(Order).order_by(Order.id.desc()).limit(100).all()
@@ -87,8 +99,8 @@ async def update_status(oid: int, status: str = Form(...)):
             s.commit()
     return RedirectResponse(url='/orders', status_code=303)
 
-# --- products (CRUD) ---
-@app.get('/products', response_class=HTMLResponse)
+# --- Products (CRUD) ---
+@app.get('/products', response_class=HTMLResponse, name="products_list")
 async def products_list(request: Request):
     with SessionLocal() as s:
         products = s.query(Product).order_by(Product.id.desc()).all()
@@ -96,10 +108,9 @@ async def products_list(request: Request):
 
 @app.post('/products/create')
 async def products_create(kind: str = Form(...), name: str = Form(...), price: int = Form(...), currency: str = Form("IRR"), is_active: str = Form("on")):
-    active = True if is_active == "on" else False
+    active = (is_active == "on")
     with SessionLocal() as s:
-        p = Product(kind=kind, name=name, price=price, currency=currency, is_active=active)
-        s.add(p)
+        s.add(Product(kind=kind, name=name, price=price, currency=currency, is_active=active))
         s.commit()
     return RedirectResponse(url='/products', status_code=303)
 
