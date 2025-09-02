@@ -1,45 +1,5 @@
 #!/usr/bin/env bash
 set -euo pipefail
-
-# ============================================
-# tele-premium-stars-bot — Turnkey Installer
-# ============================================
-# This script installs Docker & Compose (if needed),
-# clones your repo, prepares .env, brings up services,
-# initializes the DB, and (optionally) sets up Nginx + SSL.
-#
-# Usage:
-#   chmod +x install_telebot.sh
-#   ./install_telebot.sh \
-#     REPO_URL=https://github.com/<user>/<repo>.git \
-#     APP_DIR=/opt/telebot \
-#     BRANCH=main \
-#     START_ON_INSTALL=1 \
-#     WITH_NGINX=0 \
-#     DOMAIN=admin.example.com \
-#     CERTBOT_EMAIL=me@example.com
-#
-# Env vars:
-#   REPO_URL           (required) Git repo URL containing docker-compose.yaml
-#   APP_DIR            (default: $HOME/tele-premium-stars-bot)
-#   BRANCH             (default: main)
-#   START_ON_INSTALL   (default: 1) 1=start right away, 0=skip
-#   WITH_NGINX         (default: 0) 1=configure Nginx reverse proxy
-#   DOMAIN             (opt) domain for admin web (used if WITH_NGINX=1)
-#   CERTBOT_EMAIL      (opt) email for Let's Encrypt (used if WITH_NGINX=1)
-#   ADMIN_PORT         (default: 8080) internal admin service port
-#
-# App .env values (will prompt if missing in .env):
-#   BOT_TOKEN
-#   ADMIN_ALLOWED_IDS
-#   CURRENCY (default IRR)
-#   TZ (default Asia/Tehran)
-#
-# Notes:
-# - Make sure your DNS for DOMAIN points to this VPS before enabling SSL.
-# - Script is idempotent; safe to re-run.
-# ============================================
-
 # ------------- Config -------------
 : "${APP_DIR:="$HOME/noxbot"}"
 : "${BRANCH:="main"}"
